@@ -71,7 +71,6 @@ public:
     // Pure virtual functions (used in Sign-Verify functions)
     // Must be implemented in child classes
     virtual uint256 GetSignatureHash() const = 0;
-    virtual std::string GetStrMessage() const = 0;
 
     // Setters and getters
     void SetVchSig(const std::vector<unsigned char>& vchSigIn) { vchSig = vchSigIn; }

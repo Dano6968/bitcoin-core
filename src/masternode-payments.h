@@ -174,7 +174,6 @@ public:
 
     // override CSignedMessage functions
     uint256 GetSignatureHash() const override { return GetHash(); }
-    std::string GetStrMessage() const override;
     CTxIn GetVin() const { return vinMasternode; };
 
     bool IsValid(CNode* pnode, std::string& strError, int chainHeight);

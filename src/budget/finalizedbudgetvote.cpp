@@ -49,8 +49,3 @@ UniValue CFinalizedBudgetVote::ToJSON() const
     bObj.pushKV("fValid", fValid);
     return bObj;
 }
-
-std::string CFinalizedBudgetVote::GetStrMessage() const
-{
-    return strprintf("%s %s %d", vin.prevout.ToStringShort(), nBudgetHash.ToString(), nTime);
-}

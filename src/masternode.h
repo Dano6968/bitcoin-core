@@ -54,7 +54,6 @@ public:
 
     // override CSignedMessage functions
     uint256 GetSignatureHash() const override { return GetHash(); }
-    std::string GetStrMessage() const override;
     const CTxIn GetVin() const { return vin; };
     bool IsNull() const { return blockHash.IsNull() || vin.prevout.IsNull(); }
 
@@ -111,7 +110,6 @@ public:
 
     // override CSignedMessage functions
     uint256 GetSignatureHash() const override;
-    std::string GetStrMessage() const override;
     const CTxIn GetVin() const { return vin; };
     CPubKey GetPubKey() const { return pubKeyMasternode; }
 

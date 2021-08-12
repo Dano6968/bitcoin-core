@@ -303,13 +303,6 @@ uint256 CSporkMessage::GetSignatureHash() const
     return ss.GetHash();
 }
 
-std::string CSporkMessage::GetStrMessage() const
-{
-    return std::to_string(nSporkID) +
-            std::to_string(nValue) +
-            std::to_string(nTimeSigned);
-}
-
 const CPubKey CSporkMessage::GetPublicKey() const
 {
     return CPubKey(ParseHex(Params().GetConsensus().strSporkPubKey));

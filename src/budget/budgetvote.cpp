@@ -45,11 +45,6 @@ uint256 CBudgetVote::GetHash() const
     return ss.GetHash();
 }
 
-std::string CBudgetVote::GetStrMessage() const
-{
-    return strprintf("%s %s %d %d", vin.prevout.ToStringShort(), nProposalHash.ToString(), (int)nVote, nTime);
-}
-
 UniValue CBudgetVote::ToJSON() const
 {
     UniValue bObj(UniValue::VOBJ);

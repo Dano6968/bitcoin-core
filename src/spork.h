@@ -55,7 +55,6 @@ public:
 
     // override CSignedMessage functions
     uint256 GetSignatureHash() const override;
-    std::string GetStrMessage() const override;
 
     // - gets Params().SporkPubkey()
     const CPubKey GetPublicKey() const;

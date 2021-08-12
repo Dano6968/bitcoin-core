@@ -119,14 +119,8 @@ bool CSignedMessage::Sign(const std::string strSignKey)
 bool CSignedMessage::CheckSignature(const CKeyID& keyID) const
 {
     std::string strError = "";
-
-    if (nMessVersion == MessageVersion::MESS_VER_HASH) {
-        uint256 hash = GetSignatureHash();
-        return CHashSigner::VerifyHash(hash, keyID, vchSig, strError);
-    }
-
-    std::string strMessage = GetStrMessage();
-    return CMessageSigner::VerifyMessage(keyID, vchSig, strMessage, strError);
+    uint256 hash = GetSignatureHash();
+    return CHashSigner::VerifyHash(hash, keyID, vchSig, strError);
 }
 
 std::string CSignedMessage::GetSignatureBase64() const

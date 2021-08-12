@@ -130,16 +130,6 @@ uint256 CMasternode::GetSignatureHash() const
     return ss.GetHash();
 }
 
-std::string CMasternode::GetStrMessage() const
-{
-    return (addr.ToString() +
-            std::to_string(sigTime) +
-            pubKeyCollateralAddress.GetID().ToString() +
-            pubKeyMasternode.GetID().ToString() +
-            std::to_string(protocolVersion)
-    );
-}
-
 //
 // When a new masternode broadcast is sent, update our information
 //
@@ -382,12 +372,7 @@ bool CMasternodeBroadcast::Sign(const std::string strSignKey)
 bool CMasternodeBroadcast::CheckSignature() const
 {
     std::string strError = "";
-    std::string strMessage = (
-                            nMessVersion == MessageVersion::MESS_VER_HASH ?
-                            GetSignatureHash().GetHex() :
-                            GetStrMessage()
-                            );
-
+    std::string strMessage = GetSignatureHash().GetHex();
     if(!CMessageSigner::VerifyMessage(pubKeyCollateralAddress, vchSig, strMessage, strError))
         return error("%s : VerifyMessage (nMessVersion=%d) failed: %s", __func__, nMessVersion, strError);
 
@@ -594,14 +579,9 @@ uint256 CMasternodePing::GetHash() const
 {
     CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
     ss << vin;
-    if (nMessVersion == MessageVersion::MESS_VER_HASH) ss << blockHash;
+    ss << blockHash;
     ss << sigTime;
     return ss.GetHash();
-}
-
-std::string CMasternodePing::GetStrMessage() const
-{
-    return vin.ToString() + blockHash.ToString() + std::to_string(sigTime);
 }
 
 bool CMasternodePing::CheckAndUpdate(int& nDos, int nChainHeight, bool fRequireAvailable, bool fCheckSigTimeOnly)

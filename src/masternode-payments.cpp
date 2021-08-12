@@ -156,11 +156,6 @@ uint256 CMasternodePaymentWinner::GetHash() const
     return ss.GetHash();
 }
 
-std::string CMasternodePaymentWinner::GetStrMessage() const
-{
-    return vinMasternode.prevout.ToStringShort() + std::to_string(nBlockHeight) + HexStr(payee);
-}
-
 bool CMasternodePaymentWinner::IsValid(CNode* pnode, std::string& strError, int chainHeight)
 {
     int n = mnodeman.GetMasternodeRank(vinMasternode, nBlockHeight - 100);

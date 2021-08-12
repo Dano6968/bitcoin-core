@@ -50,12 +50,14 @@ CMasternodeDB::CMasternodeDB()
 bool CMasternodeDB::Write(const CMasternodeMan& mnodemanToSave)
 {
     int64_t nStart = GetTimeMillis();
+    const auto& params = Params();
 
+    bool isV5_3 = params.GetConsensus().NetworkUpgradeActive(mnodemanToSave.GetBestHeight(), Consensus::UPGRADE_V5_3);
     // serialize, checksum data up to that point, then append checksum
-    CDataStream ssMasternodes(SER_DISK, CLIENT_VERSION);
+    CDataStream ssMasternodes(SER_DISK, isV5_3 ? CLIENT_VERSION | ADDRV2_FORMAT : CLIENT_VERSION);
     ssMasternodes << MASTERNODE_DB_VERSION;
     ssMasternodes << strMagicMessage;                   // masternode cache file specific magic message
-    ssMasternodes << Params().MessageStart(); // network specific magic number
+    ssMasternodes << params.MessageStart(); // network specific magic number
     ssMasternodes << mnodemanToSave;
     uint256 hash = Hash(ssMasternodes.begin(), ssMasternodes.end());
     ssMasternodes << hash;
@@ -112,7 +114,10 @@ CMasternodeDB::ReadResult CMasternodeDB::Read(CMasternodeMan& mnodemanToLoad)
     }
     filein.fclose();
 
-    CDataStream ssMasternodes(vchData, SER_DISK, CLIENT_VERSION);
+    const auto& params = Params();
+    bool isV5_3 = params.GetConsensus().NetworkUpgradeActive(mnodemanToLoad.GetBestHeight(), Consensus::UPGRADE_V5_3);
+    // serialize, checksum data up to that point, then append checksum
+    CDataStream ssMasternodes(vchData, SER_DISK, isV5_3 ? CLIENT_VERSION | ADDRV2_FORMAT : CLIENT_VERSION);
 
     // verify stored checksum matches input data
     uint256 hashTmp = Hash(ssMasternodes.begin(), ssMasternodes.end());
@@ -139,7 +144,7 @@ CMasternodeDB::ReadResult CMasternodeDB::Read(CMasternodeMan& mnodemanToLoad)
         ssMasternodes >> MakeSpan(pchMsgTmp);
 
         // ... verify the network matches ours
-        if (memcmp(pchMsgTmp.data(), Params().MessageStart(), pchMsgTmp.size()) != 0) {
+        if (memcmp(pchMsgTmp.data(), params.MessageStart(), pchMsgTmp.size()) != 0) {
             error("%s : Invalid network magic number", __func__);
             return IncorrectMagicNumber;
         }
@@ -855,7 +860,15 @@ int CMasternodeMan::ProcessMessageInner(CNode* pfrom, std::string& strCommand, C
 
     if (strCommand == NetMsgType::MNBROADCAST) {
         CMasternodeBroadcast mnb;
-        vRecv >> mnb;
+        // Use addr v2 format after v5.3 upgrade.
+        int isActiveV5_3 = Params().GetConsensus().NetworkUpgradeActive(GetBestHeight(), Consensus::UPGRADE_V5_3);
+        if (isActiveV5_3) {
+            OverrideStream<CDataStream> s(&vRecv, vRecv.GetType(), vRecv.GetVersion() | ADDRV2_FORMAT);
+            s >> mnb;
+        } else {
+            // Pre-v5.3 serialization format
+            vRecv >> mnb;
+        }
         return ProcessMNBroadcast(pfrom, mnb);
 
     } else if (strCommand == NetMsgType::MNPING) {

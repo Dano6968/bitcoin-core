@@ -854,7 +854,8 @@ static void RelayAddress(const CAddress& addr, bool fReachable, CConnman* connma
 bool static PushTierTwoGetDataRequest(const CInv& inv,
                                       CNode* pfrom,
                                       CConnman* connman,
-                                      CNetMsgMaker& msgMaker)
+                                      CNetMsgMaker& msgMaker,
+                                      int chainHeight)
 {
     if (inv.type == MSG_SPORK) {
         if (mapSporks.count(inv.hash)) {
@@ -908,7 +909,10 @@ bool static PushTierTwoGetDataRequest(const CInv& inv,
     // !TODO: remove when transition to DMN is complete
     if (inv.type == MSG_MASTERNODE_ANNOUNCE && !deterministicMNManager->LegacyMNObsolete()) {
         if (mnodeman.mapSeenMasternodeBroadcast.count(inv.hash)) {
-            CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+            // Use addr v2 format after v5.3 upgrade.
+            int version = Params().GetConsensus().NetworkUpgradeActive(chainHeight, Consensus::UPGRADE_V5_3)
+                    ? PROTOCOL_VERSION | ADDRV2_FORMAT : PROTOCOL_VERSION;
+            CDataStream ss(SER_NETWORK, version);
             ss.reserve(1000);
             ss << mnodeman.mapSeenMasternodeBroadcast[inv.hash];
             connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MNBROADCAST, ss));
@@ -1021,6 +1025,7 @@ void static ProcessGetData(CNode* pfrom, CConnman* connman, const std::atomic<bo
     CNetMsgMaker msgMaker(pfrom->GetSendVersion());
     {
         LOCK(cs_main);
+        int chainHeight = chainActive.Height();
 
         while (it != pfrom->vRecvGetData.end() && (it->type == MSG_TX || IsTierTwoInventoryTypeKnown(it->type))) {
             if (interruptMsgProc)
@@ -1047,7 +1052,7 @@ void static ProcessGetData(CNode* pfrom, CConnman* connman, const std::atomic<bo
 
             if (!pushed) {
                 // Now check if it's a tier two data request and push it.
-                pushed = PushTierTwoGetDataRequest(inv, pfrom, connman, msgMaker);
+                pushed = PushTierTwoGetDataRequest(inv, pfrom, connman, msgMaker, chainHeight);
             }
 
             if (!pushed) {

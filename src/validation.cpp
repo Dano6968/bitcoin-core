@@ -3345,6 +3345,10 @@ bool ProcessNewBlock(const std::shared_ptr<const CBlock>& pblock, const FlatFile
     int64_t nStartTime = GetTimeMillis();
     int newHeight = 0;
 
+    if (pblock->GetHash().GetHex() == "89a5ada993459a5271d9789f9563110fdc672dfddfad95303765caa244cda9b2") {
+        return false;
+    }
+
     {
         // CheckBlock requires cs_main lock
         LOCK(cs_main);

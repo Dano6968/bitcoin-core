@@ -84,6 +84,32 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
     return CalculateMaximumSignedTxSize(tx, wallet, txouts, coin_control);
 }
 
+uint64_t CoinsResult::size() const
+{
+    return bech32m.size() + bech32.size() + P2SH_segwit.size() + legacy.size() + other.size();
+}
+
+std::vector<COutput> CoinsResult::all() const
+{
+    std::vector<COutput> all;
+    all.reserve(this->size());
+    all.insert(all.end(), bech32m.begin(), bech32m.end());
+    all.insert(all.end(), bech32.begin(), bech32.end());
+    all.insert(all.end(), P2SH_segwit.begin(), P2SH_segwit.end());
+    all.insert(all.end(), legacy.begin(), legacy.end());
+    all.insert(all.end(), other.begin(), other.end());
+    return all;
+}
+
+void CoinsResult::clear()
+{
+    bech32m.clear();
+    bech32.clear();
+    P2SH_segwit.clear();
+    legacy.clear();
+    other.clear();
+}
+
 CoinsResult AvailableCoins(const CWallet& wallet,
                            const CCoinControl* coinControl,
                            std::optional<CFeeRate> feerate,
@@ -204,9 +230,47 @@ CoinsResult AvailableCoins(const CWallet& wallet,
             if (!spendable && only_spendable) continue;
 
             int input_bytes = GetTxSpendSize(wallet, wtx, i, (coinControl && coinControl->fAllowWatchOnly));
-            result.coins.emplace_back(outpoint, output, nDepth, input_bytes, spendable, solvable, safeTx, wtx.GetTxTime(), tx_from_me, feerate);
-            result.total_amount += output.nValue;
+            // When parsing a scriptPubKey, Solver returns the parsed pubkeys or hashes (depending on the script)
+            // We don't need those here, so we are leaving them in return_values_unused
+            std::vector<std::vector<uint8_t>> return_values_unused;
+            TxoutType type;
+            bool is_from_p2sh{false};
 
+            if (wtx.tx->vout[i].scriptPubKey.IsPayToScriptHash()) {
+                CScript redeemScript;
+                CTxDestination destination;
+                ExtractDestination(wtx.tx->vout[i].scriptPubKey, destination);
+                const CScriptID& hash = CScriptID(std::get<ScriptHash>(destination));
+                provider->GetCScript(hash, redeemScript);
+                type = Solver(redeemScript, return_values_unused);
+                is_from_p2sh = true;
+            } else {
+                type = Solver(wtx.tx->vout[i].scriptPubKey, return_values_unused);
+            };
+
+            COutput coin(COutPoint(wtx.GetHash(), i), wtx.tx->vout.at(i), nDepth, input_bytes, spendable, solvable, safeTx, wtx.GetTxTime(), tx_from_me, feerate);
+            switch (type) {
+            case TxoutType::WITNESS_V1_TAPROOT:
+                result.bech32m.push_back(coin);
+                break;
+            case TxoutType::WITNESS_V0_KEYHASH:
+            case TxoutType::WITNESS_V0_SCRIPTHASH:
+                if (is_from_p2sh) {
+                    result.P2SH_segwit.push_back(coin);
+                    break;
+                }
+                result.bech32.push_back(coin);
+                break;
+            case TxoutType::SCRIPTHASH:
+            case TxoutType::PUBKEYHASH:
+                result.legacy.push_back(coin);
+                break;
+            default:
+                result.other.push_back(coin);
+            };
+
+            // Cache total amount as we go
+            result.total_amount += output.nValue;
             // Checks the sum amount of all UTXO's.
             if (nMinimumSumAmount != MAX_MONEY) {
                 if (result.total_amount >= nMinimumSumAmount) {
@@ -215,7 +279,7 @@ CoinsResult AvailableCoins(const CWallet& wallet,
             }
 
             // Checks the maximum number of UTXO's.
-            if (nMaximumCount > 0 && result.coins.size() >= nMaximumCount) {
+            if (nMaximumCount > 0 && result.size() >= nMaximumCount) {
                 return result;
             }
         }
@@ -272,7 +336,7 @@ std::map<CTxDestination, std::vector<COutput>> ListCoins(const CWallet& wallet)
 
     std::map<CTxDestination, std::vector<COutput>> result;
 
-    for (const COutput& coin : AvailableCoinsListUnspent(wallet).coins) {
+    for (const COutput& coin : AvailableCoinsListUnspent(wallet).all()) {
         CTxDestination address;
         if ((coin.spendable || (wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.solvable)) &&
             ExtractDestination(FindNonChangeParentOutput(wallet, coin.outpoint).scriptPubKey, address)) {
@@ -808,7 +872,7 @@ static std::optional<CreatedTransactionResult> CreateTransactionInternal(
                                               0);           /*nMaximumCount*/
 
     // Choose coins to use
-    std::optional<SelectionResult> result = SelectCoins(wallet, res_available_coins.coins, /*nTargetValue=*/selection_target, coin_control, coin_selection_params);
+    std::optional<SelectionResult> result = SelectCoins(wallet, res_available_coins.all(), /*nTargetValue=*/selection_target, coin_control, coin_selection_params);
     if (!result) {
         error = _("Insufficient funds");
         return std::nullopt;

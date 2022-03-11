@@ -9,7 +9,6 @@
 #include <boost/process.hpp>
 #endif // ENABLE_EXTERNAL_SIGNER
 
-#include <chainparamsbase.h>
 #include <fs.h>
 #include <sync.h>
 #include <util/check.h>

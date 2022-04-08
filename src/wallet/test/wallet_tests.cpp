@@ -523,11 +523,12 @@ public:
         CTransactionRef tx;
         CAmount fee;
         int changePos = -1;
-        bilingual_str error;
         CCoinControl dummy;
         FeeCalculation fee_calc_out;
         {
-            BOOST_CHECK(CreateTransaction(*wallet, {recipient}, tx, fee, changePos, error, dummy, fee_calc_out));
+            auto res = CreateTransaction(*wallet, {recipient}, fee, changePos, dummy, fee_calc_out);
+            BOOST_CHECK(res);
+            tx = *res.GetObjResult();
         }
         wallet->CommitTransaction(tx, {}, {});
         CMutableTransaction blocktx;

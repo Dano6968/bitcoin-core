@@ -9,6 +9,7 @@
 #include <fs.h>
 #include <interfaces/chain.h>          // For ChainClient
 #include <pubkey.h>                    // For CKeyID and CScriptID (definitions needed in CTxDestination instantiation)
+#include <result.h>
 #include <script/standard.h>           // For CTxDestination
 #include <support/allocators/secure.h> // For SecureString
 #include <util/message.h>
@@ -138,12 +139,11 @@ public:
     virtual void listLockedCoins(std::vector<COutPoint>& outputs) = 0;
 
     //! Create transaction.
-    virtual CTransactionRef createTransaction(const std::vector<wallet::CRecipient>& recipients,
+    virtual BResult<CTransactionRef> createTransaction(const std::vector<wallet::CRecipient>& recipients,
         const wallet::CCoinControl& coin_control,
         bool sign,
         int& change_pos,
-        CAmount& fee,
-        bilingual_str& fail_reason) = 0;
+        CAmount& fee) = 0;
 
     //! Commit transaction.
     virtual void commitTransaction(CTransactionRef tx,

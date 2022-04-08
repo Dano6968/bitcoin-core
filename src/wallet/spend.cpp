@@ -600,8 +600,8 @@ CallResult<SelectionResult> SelectCoins(const CWallet& wallet, const std::vector
             // OutputGroups use heuristics that may overestimate ancestor/descendant counts.
             if (!fRejectLongChains) {
                 if (auto r8{AttemptSelection(wallet, value_to_select,
-                                      CoinEligibilityFilter(0, 1, std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max(), true /* include_partial_groups */),
-                                      vCoins, coin_selection_params)}) {
+                                             CoinEligibilityFilter(0, 1, std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max(), true /* include_partial_groups */),
+                                             vCoins, coin_selection_params)}) {
                     return r8;
                 }
             }
@@ -818,15 +818,20 @@ static OperationResult CreateTransactionInternal(
     const CAmount not_input_fees = coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.tx_noinputs_size);
     CAmount selection_target = recipients_sum + not_input_fees;
 
-    // Get available coins
+    // Get available coins and, if the mempool filter is provided, the unconf coins that exceed the mempool acceptance restrictions
     std::vector<COutput> vAvailableCoins;
-    AvailableCoins(wallet, vAvailableCoins, &coin_control, 1, MAX_MONEY, MAX_MONEY, 0);
+    std::unique_ptr<std::vector<COutput>> vAvailableUnconfCoins = coin_control.m_mempool_filter ? std::make_unique<std::vector<COutput>>() :  nullptr;
+    AvailableCoins(wallet, vAvailableCoins, &coin_control, 1, MAX_MONEY, MAX_MONEY, 0, vAvailableUnconfCoins.get());
 
     // Choose coins to use
     auto selection_res = SelectCoins(wallet, vAvailableCoins, /*nTargetValue=*/selection_target, coin_control, coin_selection_params);
     if (!selection_res) {
         bilingual_str extra_info;
-        if (!selection_res.GetError().empty()) extra_info = Untranslated(": ") + selection_res.GetError();
+        if (vAvailableUnconfCoins && !vAvailableUnconfCoins->empty()) {
+            extra_info = Untranslated(": ") +
+                    _("Unconfirmed UTXOs are available, but spending them creates a chain of transactions that will be rejected by the mempool."
+                      " These funds will become available when the transaction/s confirms");
+        }
         return ErrorOut(_("Insufficient funds") + extra_info);
     }
     auto result = selection_res.GetObjResult();

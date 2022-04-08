@@ -89,7 +89,8 @@ void AvailableCoins(const CWallet& wallet,
                     const CAmount& nMinimumAmount,
                     const CAmount& nMaximumAmount,
                     const CAmount& nMinimumSumAmount,
-                    const uint64_t nMaximumCount)
+                    const uint64_t nMaximumCount,
+                    bool* has_long_chain_of_unconf)
 {
     AssertLockHeld(wallet.cs_wallet);
 
@@ -103,6 +104,7 @@ void AvailableCoins(const CWallet& wallet,
     const bool only_safe = {coinControl ? !coinControl->m_include_unsafe_inputs : true};
 
     // If the mempool filter was set, skip out-of-bounds unconf txs.
+    // Plus, 'has_long_chain_of_unconf' will be set to true if any coin exceed the max ancestors/descendants count.
     const bool with_mempool_restriction = coinControl && coinControl->m_mempool_filter;
 
     std::set<uint256> trusted_parents;
@@ -174,6 +176,7 @@ void AvailableCoins(const CWallet& wallet,
                 // Skip unconfirmed coins by the mempool restrictions
                 if (with_mempool_restriction && (ancestor_count >= coinControl->m_mempool_filter->max_ancestors_count ||
                      descendant_count >= coinControl->m_mempool_filter->max_descendants_count)) {
+                    if (has_long_chain_of_unconf) *has_long_chain_of_unconf = true; // alert user about a long chain of unconf txs.
                     continue;
                 }
                 mempool_info = std::optional<MempoolInfo>(MempoolInfo{ancestor_count, descendant_count});
@@ -809,15 +812,22 @@ static CallResult<CTransactionRef> CreateTransactionInternal(
     const CAmount not_input_fees = coin_selection_params.m_effective_feerate.GetFee(coin_selection_params.tx_noinputs_size);
     CAmount selection_target = recipients_sum + not_input_fees;
 
-    // Get available coins
+    // Get available coins and, if the mempool filter is provided, the unconf coins that exceed the mempool acceptance restrictions
     std::vector<COutput> vAvailableCoins;
-    AvailableCoins(wallet, vAvailableCoins, &coin_control, 1, MAX_MONEY, MAX_MONEY, 0);
+    bool has_long_chains_of_unconf = false;
+    AvailableCoins(wallet, vAvailableCoins, &coin_control, 1, MAX_MONEY, MAX_MONEY, 0, &has_long_chains_of_unconf);
 
     // Choose coins to use
     auto selection_res = SelectCoins(wallet, vAvailableCoins, /*nTargetValue=*/selection_target, coin_control, coin_selection_params);
     if (!selection_res) {
         bilingual_str extra_info;
-        if (!selection_res.GetError().empty()) extra_info = Untranslated(": ") + selection_res.GetError();
+        if (!selection_res.GetError().empty()) {
+            extra_info = Untranslated(": ") + selection_res.GetError();
+        } else if (has_long_chains_of_unconf) {
+                extra_info = Untranslated(": ") +
+                             _("Unconfirmed UTXOs are available, but spending them creates a chain of transactions that will be rejected by the mempool."
+                               " These funds will become available when the transaction/s confirms");
+        }
         return _("Insufficient funds") + extra_info;
     }
     auto result = selection_res.GetObjResult();

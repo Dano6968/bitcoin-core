@@ -310,6 +310,7 @@ RPCHelpMan sendtoaddress()
     // Filter unconf coins that exceed the mempool policies. This could be customizable in the future.
     coin_control.m_mempool_filter = pwallet->GetMempoolPolicy();
 
+    coin_control.m_include_only_spendable_outputs = true;
     return SendMoney(*pwallet, coin_control, recipients, mapValue, verbose);
 },
     };
@@ -396,6 +397,8 @@ RPCHelpMan sendmany()
     if (!request.params[5].isNull()) {
         coin_control.m_signal_bip125_rbf = request.params[5].get_bool();
     }
+
+    coin_control.m_include_only_spendable_outputs = true;
 
     SetFeeEstimateMode(*pwallet, coin_control, /*conf_target=*/request.params[6], /*estimate_mode=*/request.params[7], /*fee_rate=*/request.params[8], /*override_min_fee=*/false);
 

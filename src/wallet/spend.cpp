@@ -102,6 +102,7 @@ void AvailableCoins(const CWallet& wallet,
     const int min_depth = {coinControl ? coinControl->m_min_depth : DEFAULT_MIN_DEPTH};
     const int max_depth = {coinControl ? coinControl->m_max_depth : DEFAULT_MAX_DEPTH};
     const bool only_safe = {coinControl ? !coinControl->m_include_unsafe_inputs : true};
+    const bool only_spendable = {coinControl ? coinControl->m_include_only_spendable_outputs : false};
 
     // If the mempool filter was set, the available coins that surpass the limits will be added to the 'vUnconfCoins' vector.
     // For example, outputs that exceed the max ancestors/descendants count policy.
@@ -209,6 +210,12 @@ void AvailableCoins(const CWallet& wallet,
 
             bool solvable = provider ? IsSolvable(*provider, wtx.tx->vout[i].scriptPubKey) : false;
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
+
+            // Filter by spendable outputs only
+            if (!spendable && only_spendable) {
+                continue;
+            }
+
             int input_bytes = GetTxSpendSize(wallet, wtx, i, (coinControl && coinControl->fAllowWatchOnly));
 
             // Split unconfirmed txs based on the filtering conditions.
@@ -1056,6 +1063,9 @@ bool FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& nFeeRet,
     for (const CTxIn& txin : tx.vin) {
         coinControl.Select(txin.prevout);
     }
+
+    // Only include spendable outputs
+    coinControl.m_include_only_spendable_outputs = true;
 
     // Acquire the locks to prevent races to the new locked unspents between the
     // CreateTransaction call and LockCoin calls (when lockUnspents is true).

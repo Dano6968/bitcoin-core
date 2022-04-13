@@ -75,7 +75,8 @@ static void CoinSelection(benchmark::Bench& bench)
         /*avoid_partial=*/ false,
     };
     bench.run([&] {
-        auto result = AttemptSelection(wallet, 1003 * COIN, filter_standard, coins, coin_selection_params);
+        std::map<uint256, wallet::UnconfOutMempoolData> mempool_data_cache;
+        auto result = AttemptSelection(wallet, 1003 * COIN, filter_standard, coins, coin_selection_params, mempool_data_cache, true);
         assert(result);
         auto obj = result.GetObjResult();
         assert(obj->GetSelectedValue() == 1003 * COIN);

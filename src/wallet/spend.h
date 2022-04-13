@@ -51,7 +51,14 @@ const CTxOut& FindNonChangeParentOutput(const CWallet& wallet, const COutPoint& 
  */
 std::map<CTxDestination, std::vector<COutput>> ListCoins(const CWallet& wallet) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
-std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<COutput>& outputs, const CoinSelectionParams& coin_sel_params, const CoinEligibilityFilter& filter, bool positive_only);
+// The mempool information about certain UTXO.
+struct UnconfOutMempoolData {
+    size_t ancestors{0};
+    size_t descendants{0};
+};
+
+std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<COutput>& outputs, const CoinSelectionParams& coin_sel_params, const CoinEligibilityFilter& filter,
+                                      bool positive_only, std::map<uint256, UnconfOutMempoolData>& mempool_data_cache, bool load_mempool_data_cache);
 
 /**
  * Attempt to find a valid input set that meets the provided eligibility filter and target.
@@ -63,11 +70,13 @@ std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<C
  * param@[in]  eligilibity_filter     A filter containing rules for which coins are allowed to be included in this selection
  * param@[in]  coins                  The vector of coins available for selection prior to filtering
  * param@[in]  coin_selection_params  Parameters for the coin selection
+ * param@[in]  mempool_data_cache     Mempool information cache for each coin in 'coins'
+ * param@[in]  load_mempool_cache     Whether should load the mempool_data_cache or use the one provided.
  * returns                            If successful, a SelectionResult containing the input set
  *                                    If failed, a nullopt
  */
 CallResult<SelectionResult> AttemptSelection(const CWallet& wallet, const CAmount& nTargetValue, const CoinEligibilityFilter& eligibility_filter, std::vector<COutput> coins,
-                        const CoinSelectionParams& coin_selection_params);
+                        const CoinSelectionParams& coin_selection_params, std::map<uint256, UnconfOutMempoolData>& mempool_data_cache, bool load_mempool_cache);
 
 /**
  * Select a set of coins such that nTargetValue is met and at least

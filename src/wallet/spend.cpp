@@ -298,27 +298,46 @@ std::map<CTxDestination, std::vector<COutput>> ListCoins(const CWallet& wallet)
     return result;
 }
 
-std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<COutput>& outputs, const CoinSelectionParams& coin_sel_params, const CoinEligibilityFilter& filter, bool positive_only)
+std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<COutput>& outputs, const CoinSelectionParams& coin_sel_params, const CoinEligibilityFilter& filter,
+                                      bool positive_only, std::map<uint256, UnconfOutMempoolData>& mempool_data_cache, bool load_mempool_data_cache)
 {
-    std::vector<OutputGroup> groups_out;
-
-    if (!coin_sel_params.m_avoid_partial_spends) {
-        // Allowing partial spends  means no grouping. Each COutput gets its own OutputGroup.
+    const auto& forEachOutput = [&](std::function<void(const COutput&, const UnconfOutMempoolData&)>& callback){
         for (const COutput& output : outputs) {
             // Skip outputs we cannot spend
             if (!output.spendable) continue;
 
-            size_t ancestors, descendants;
-            wallet.chain().getTransactionAncestry(output.outpoint.hash, ancestors, descendants);
+            // If this is an unconfirmed tx, load or get the cached mempool data
+            // This prevents future calls to 'getTransactionAncestry' which locks the mempool mutex.
+            UnconfOutMempoolData memData;
+            if (output.depth == 0) {
+                if (load_mempool_data_cache) {
+                    wallet.chain().getTransactionAncestry(output.outpoint.hash, memData.ancestors, memData.descendants);
+                    mempool_data_cache.emplace(output.outpoint.hash, memData);
+                } else {
+                    auto it = mempool_data_cache.find(output.outpoint.hash);
+                    if (it != mempool_data_cache.end()) {
+                        memData = it->second;
+                    }
+                }
+            }
+            callback(output, memData);
+        }
+    };
 
+    std::vector<OutputGroup> groups_out;
+    if (!coin_sel_params.m_avoid_partial_spends) {
+        // Allowing partial spends  means no grouping. Each COutput gets its own OutputGroup.
+        std::function<void(const COutput&, const UnconfOutMempoolData&)> callback = ([&](const COutput& output, const UnconfOutMempoolData& memData) {
             // Make an OutputGroup containing just this output
             OutputGroup group{coin_sel_params};
-            group.Insert(output, ancestors, descendants, positive_only);
+            group.Insert(output, memData.ancestors, memData.descendants, positive_only);
 
             // Check the OutputGroup's eligibility. Only add the eligible ones.
-            if (positive_only && group.GetSelectionAmount() <= 0) continue;
+            if (positive_only && group.GetSelectionAmount() <= 0) return;
             if (group.m_outputs.size() > 0 && group.EligibleForSpending(filter)) groups_out.push_back(group);
-        }
+        });
+
+        forEachOutput(callback);
         return groups_out;
     }
 
@@ -329,36 +348,31 @@ std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<C
     // to the last OutputGroup in the vector for the scriptPubKey. When the last OutputGroup has
     // OUTPUT_GROUP_MAX_ENTRIES COutputs, a new OutputGroup is added to the end of the vector.
     std::map<CScript, std::vector<OutputGroup>> spk_to_groups_map;
-    for (const auto& output : outputs) {
-        // Skip outputs we cannot spend
-        if (!output.spendable) continue;
+    std::function<void(const COutput&, const UnconfOutMempoolData&)> callback = [&](const COutput& output, const UnconfOutMempoolData& memData) {
+            CScript spk = output.txout.scriptPubKey;
+            std::vector<OutputGroup>& groups = spk_to_groups_map[spk];
 
-        size_t ancestors, descendants;
-        wallet.chain().getTransactionAncestry(output.outpoint.hash, ancestors, descendants);
-        CScript spk = output.txout.scriptPubKey;
+            if (groups.size() == 0) {
+                // No OutputGroups for this scriptPubKey yet, add one
+                groups.emplace_back(coin_sel_params);
+            }
 
-        std::vector<OutputGroup>& groups = spk_to_groups_map[spk];
+            // Get the last OutputGroup in the vector so that we can add the COutput to it
+            // A pointer is used here so that group can be reassigned later if it is full.
+            OutputGroup* group = &groups.back();
 
-        if (groups.size() == 0) {
-            // No OutputGroups for this scriptPubKey yet, add one
-            groups.emplace_back(coin_sel_params);
-        }
+            // Check if this OutputGroup is full. We limit to OUTPUT_GROUP_MAX_ENTRIES when using -avoidpartialspends
+            // to avoid surprising users with very high fees.
+            if (group->m_outputs.size() >= OUTPUT_GROUP_MAX_ENTRIES) {
+                // The last output group is full, add a new group to the vector and use that group for the insertion
+                groups.emplace_back(coin_sel_params);
+                group = &groups.back();
+            }
 
-        // Get the last OutputGroup in the vector so that we can add the COutput to it
-        // A pointer is used here so that group can be reassigned later if it is full.
-        OutputGroup* group = &groups.back();
-
-        // Check if this OutputGroup is full. We limit to OUTPUT_GROUP_MAX_ENTRIES when using -avoidpartialspends
-        // to avoid surprising users with very high fees.
-        if (group->m_outputs.size() >= OUTPUT_GROUP_MAX_ENTRIES) {
-            // The last output group is full, add a new group to the vector and use that group for the insertion
-            groups.emplace_back(coin_sel_params);
-            group = &groups.back();
-        }
-
-        // Add the output to group
-        group->Insert(output, ancestors, descendants, positive_only);
-    }
+            // Add the output to group
+            group->Insert(output, memData.ancestors, memData.descendants, positive_only);
+    };
+    forEachOutput(callback);
 
     // Now we go through the entire map and pull out the OutputGroups
     for (const auto& spk_and_groups_pair: spk_to_groups_map) {
@@ -383,19 +397,21 @@ std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<C
 }
 
 CallResult<SelectionResult> AttemptSelection(const CWallet& wallet, const CAmount& nTargetValue, const CoinEligibilityFilter& eligibility_filter, std::vector<COutput> coins,
-                                             const CoinSelectionParams& coin_selection_params)
+                                             const CoinSelectionParams& coin_selection_params, std::map<uint256, UnconfOutMempoolData>& mempool_data_cache, bool load_mempool_data_cache)
 {
     // Vector of results. We will choose the best one based on waste.
     std::vector<SelectionResult> results;
 
     // Note that unlike KnapsackSolver, we do not include the fee for creating a change output as BnB will not create a change output.
-    std::vector<OutputGroup> positive_groups = GroupOutputs(wallet, coins, coin_selection_params, eligibility_filter, true /* positive_only */);
+    std::vector<OutputGroup> positive_groups = GroupOutputs(wallet, coins, coin_selection_params, eligibility_filter, true /* positive_only */,
+                                                            mempool_data_cache, load_mempool_data_cache);
     if (auto bnb_result{SelectCoinsBnB(positive_groups, nTargetValue, coin_selection_params.m_cost_of_change)}) {
         results.push_back(*bnb_result);
     }
 
     // The knapsack solver has some legacy behavior where it will spend dust outputs. We retain this behavior, so don't filter for positive only here.
-    std::vector<OutputGroup> all_groups = GroupOutputs(wallet, coins, coin_selection_params, eligibility_filter, false /* positive_only */);
+    std::vector<OutputGroup> all_groups = GroupOutputs(wallet, coins, coin_selection_params, eligibility_filter, false /* positive_only */,
+                                                       mempool_data_cache, load_mempool_data_cache);
     // While nTargetValue includes the transaction fees for non-input things, it does not include the fee for creating a change output.
     // So we need to include that for KnapsackSolver as well, as we are expecting to create a change output.
     if (auto knapsack_result{KnapsackSolver(all_groups, nTargetValue + coin_selection_params.m_change_fee,
@@ -528,28 +544,31 @@ CallResult<SelectionResult> SelectCoins(const CWallet& wallet, const std::vector
         // Pre-selected inputs already cover the target amount.
         if (value_to_select <= 0) return CallResult<SelectionResult>(SelectionResult(nTargetValue));
 
+        // Mempool data cache to not have to lock the Mempool's mutex on every 'AttemptSelection' call for each output.
+        std::map<uint256, UnconfOutMempoolData> mempool_data_cache;
+
         // If possible, fund the transaction with confirmed UTXOs only. Prefer at least six
         // confirmations on outputs received from other wallets and only spend confirmed change.
-        if (auto r1{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(1, 6, 0), vCoins, coin_selection_params)}) return r1;
-        if (auto r2{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(1, 1, 0), vCoins, coin_selection_params)}) return r2;
+        if (auto r1{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(1, 6, 0), vCoins, coin_selection_params, mempool_data_cache, true)}) return r1;
+        if (auto r2{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(1, 1, 0), vCoins, coin_selection_params, mempool_data_cache, false)}) return r2;
 
         // Fall back to using zero confirmation change (but with as few ancestors in the mempool as
         // possible) if we cannot fund the transaction otherwise.
         if (wallet.m_spend_zero_conf_change) {
-            if (auto r3{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(0, 1, 2), vCoins, coin_selection_params)}) return r3;
+            if (auto r3{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(0, 1, 2), vCoins, coin_selection_params, mempool_data_cache, false)}) return r3;
             if (auto r4{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(0, 1, std::min((size_t)4, max_ancestors/3), std::min((size_t)4, max_descendants/3)),
-                                   vCoins, coin_selection_params)}) {
+                                   vCoins, coin_selection_params, mempool_data_cache, false)}) {
                 return r4;
             }
             if (auto r5{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(0, 1, max_ancestors/2, max_descendants/2),
-                                   vCoins, coin_selection_params)}) {
+                                   vCoins, coin_selection_params, mempool_data_cache, false)}) {
                 return r5;
             }
             // If partial groups are allowed, relax the requirement of spending OutputGroups (groups
             // of UTXOs sent to the same address, which are obviously controlled by a single wallet)
             // in their entirety.
             if (auto r6{AttemptSelection(wallet, value_to_select, CoinEligibilityFilter(0, 1, max_ancestors-1, max_descendants-1, true /* include_partial_groups */),
-                                   vCoins, coin_selection_params)}) {
+                                   vCoins, coin_selection_params, mempool_data_cache, false)}) {
                 return r6;
             }
             // Try with unsafe inputs if they are allowed. This may spend unconfirmed outputs
@@ -557,7 +576,7 @@ CallResult<SelectionResult> SelectCoins(const CWallet& wallet, const std::vector
             if (coin_control.m_include_unsafe_inputs) {
                 if (auto r7{AttemptSelection(wallet, value_to_select,
                     CoinEligibilityFilter(0 /* conf_mine */, 0 /* conf_theirs */, max_ancestors-1, max_descendants-1, true /* include_partial_groups */),
-                    vCoins, coin_selection_params)}) {
+                    vCoins, coin_selection_params, mempool_data_cache, false)}) {
                     return r7;
                 }
             }
@@ -566,7 +585,7 @@ CallResult<SelectionResult> SelectCoins(const CWallet& wallet, const std::vector
             // OutputGroups use heuristics that may overestimate ancestor/descendant counts.
             if (auto r8{AttemptSelection(wallet, value_to_select,
                                          CoinEligibilityFilter(0, 1, std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max(), true /* include_partial_groups */),
-                                         vCoins, coin_selection_params)}) {
+                                         vCoins, coin_selection_params, mempool_data_cache, false)}) {
                 if (fRejectLongChains) {
                     // Return a "you have money, but the wallet can't create a valid transaction right now".
                     return CallResult<SelectionResult>(_("Unconfirmed UTXOs are available, but spending them creates a chain of transactions that will be rejected by the mempool."

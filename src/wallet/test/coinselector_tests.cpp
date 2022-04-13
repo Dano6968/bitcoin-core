@@ -158,7 +158,9 @@ inline std::vector<OutputGroup>& KnapsackGroupOutputs(const std::vector<COutput>
         /*avoid_partial=*/ false,
     };
     static std::vector<OutputGroup> static_groups;
-    static_groups = GroupOutputs(wallet, coins, coin_selection_params, filter, /*positive_only=*/false);
+    std::map<uint256, UnconfOutMempoolData> mempool_data_cache;
+    bool load_mempool_data_cache = true;
+    static_groups = GroupOutputs(wallet, coins, coin_selection_params, filter, /*positive_only=*/false, mempool_data_cache, load_mempool_data_cache);
     return static_groups;
 }
 

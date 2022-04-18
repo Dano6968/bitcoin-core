@@ -260,11 +260,9 @@ public:
         CAmount& fee) override
     {
         LOCK(m_wallet->cs_wallet);
-        CTransactionRef tx;
         FeeCalculation fee_calc_out;
-        auto res = CreateTransaction(*m_wallet, recipients, tx, fee, change_pos,
-                                     coin_control, fee_calc_out, sign);
-        return res ? CallResult<CTransactionRef>(tx) : CallResult<CTransactionRef>(res.GetError());
+        return CreateTransaction(*m_wallet, recipients, fee,
+                                 change_pos, coin_control, fee_calc_out, sign);
     }
     void commitTransaction(CTransactionRef tx,
         WalletValueMap value_map,

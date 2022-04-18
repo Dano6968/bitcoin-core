@@ -218,11 +218,10 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
     // We cannot source new unconfirmed inputs(bip125 rule 2)
     new_coin_control.m_min_depth = 1;
 
-    CTransactionRef tx_new;
     CAmount fee_ret;
     int change_pos_in_out = -1; // No requested location for change
     FeeCalculation fee_calc_out;
-    auto res = CreateTransaction(wallet, recipients, tx_new, fee_ret, change_pos_in_out, new_coin_control, fee_calc_out, false);
+    auto res = CreateTransaction(wallet, recipients, fee_ret, change_pos_in_out, new_coin_control, fee_calc_out, false);
     if (!res) {
         errors.push_back(Untranslated("Unable to create transaction.") + Untranslated(" ") + res.GetError());
         return Result::WALLET_ERROR;
@@ -232,7 +231,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
     new_fee = fee_ret;
 
     // Write back transaction
-    mtx = CMutableTransaction(*tx_new);
+    mtx = CMutableTransaction(**res.GetObjResult());
 
     return Result::OK;
 }

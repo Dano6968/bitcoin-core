@@ -157,12 +157,12 @@ UniValue SendMoney(CWallet& wallet, const CCoinControl &coin_control, std::vecto
     // Send
     CAmount nFeeRequired = 0;
     int nChangePosRet = -1;
-    CTransactionRef tx;
     FeeCalculation fee_calc_out;
-    auto res = CreateTransaction(wallet, recipients, tx, nFeeRequired, nChangePosRet, coin_control, fee_calc_out, true);
+    auto res = CreateTransaction(wallet, recipients, nFeeRequired, nChangePosRet, coin_control, fee_calc_out, true);
     if (!res) {
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, res.GetError().original);
     }
+    CTransactionRef tx = *res.GetObjResult();
     wallet.CommitTransaction(tx, std::move(map_value), {} /* orderForm */);
     if (verbose) {
         UniValue entry(UniValue::VOBJ);

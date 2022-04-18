@@ -34,9 +34,22 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* walle
 TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* wallet, const CCoinControl* coin_control = nullptr) EXCLUSIVE_LOCKS_REQUIRED(wallet->cs_wallet);
 
 /**
- * populate vCoins with vector of available COutputs.
+ * Populate vCoins with vector of available COutputs.
+ *
+ * If the mempool filter inside CoinControl is set, the available coins that exceed the filtering limits will be added to the 'vUnconfCoins' vector.
+ * For example, outputs that are available but exceed the provided max ancestors/descendants limit policy.
+ * This is useful to:
+ * 1) Do not return coins in the available vector that are going to be rejected by the mempool restrictions.
+ * 2) The 'vUnconfCoins' can be used to properly notify the user about existent long-chain of transactions in the mempool
+ *    that require confirmations in order to be spend.
  */
-void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const CCoinControl* coinControl = nullptr, const CAmount& nMinimumAmount = 1, const CAmount& nMaximumAmount = MAX_MONEY, const CAmount& nMinimumSumAmount = MAX_MONEY, const uint64_t nMaximumCount = 0) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
+void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins,
+                    const CCoinControl* coinControl = nullptr,
+                    const CAmount& nMinimumAmount = 1,
+                    const CAmount& nMaximumAmount = MAX_MONEY,
+                    const CAmount& nMinimumSumAmount = MAX_MONEY,
+                    const uint64_t nMaximumCount = 0,
+                    std::vector<COutput>* vUnconfCoins = nullptr) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
 CAmount GetAvailableBalance(const CWallet& wallet, const CCoinControl* coinControl = nullptr);
 

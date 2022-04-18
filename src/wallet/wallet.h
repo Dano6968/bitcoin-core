@@ -114,6 +114,7 @@ static constexpr size_t DUMMY_NESTED_P2WPKH_INPUT_SIZE = 91;
 class CCoinControl;
 class CWalletTx;
 class ReserveDestination;
+struct MempoolPolicy;
 
 //! Default for -addresstype
 constexpr OutputType DEFAULT_ADDRESS_TYPE{OutputType::BECH32};
@@ -461,6 +462,9 @@ public:
     bool UnlockCoin(const COutPoint& output, WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool UnlockAllCoins() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void ListLockedCoins(std::vector<COutPoint>& vOutpts) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    /** Return the wallet's mempool policy (if it's nullopt, then the wallet is accepting long mempool chains) */
+    std::optional<MempoolPolicy> GetMempoolPolicy();
 
     /*
      * Rescan abort properties

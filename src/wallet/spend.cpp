@@ -83,7 +83,14 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
     return CalculateMaximumSignedTxSize(tx, wallet, txouts, coin_control);
 }
 
-void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const CCoinControl* coinControl, const CAmount& nMinimumAmount, const CAmount& nMaximumAmount, const CAmount& nMinimumSumAmount, const uint64_t nMaximumCount)
+void AvailableCoins(const CWallet& wallet,
+                    std::vector<COutput>& vCoins,
+                    const CCoinControl* coinControl,
+                    const CAmount& nMinimumAmount,
+                    const CAmount& nMaximumAmount,
+                    const CAmount& nMinimumSumAmount,
+                    const uint64_t nMaximumCount,
+                    std::vector<COutput>* vUnconfCoins)
 {
     AssertLockHeld(wallet.cs_wallet);
 
@@ -95,6 +102,10 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
     const int min_depth = {coinControl ? coinControl->m_min_depth : DEFAULT_MIN_DEPTH};
     const int max_depth = {coinControl ? coinControl->m_max_depth : DEFAULT_MAX_DEPTH};
     const bool only_safe = {coinControl ? !coinControl->m_include_unsafe_inputs : true};
+
+    // If the mempool filter was set, the available coins that surpass the limits will be added to the 'vUnconfCoins' vector.
+    // For example, outputs that exceed the max ancestors/descendants count policy.
+    const bool split_mempool_outs = {coinControl && coinControl->m_mempool_filter};
 
     std::set<uint256> trusted_parents;
     for (const auto& entry : wallet.mapWallet)
@@ -109,10 +120,19 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
         if (nDepth < 0)
             continue;
 
-        // We should not consider coins which aren't at least in our mempool
-        // It's possible for these to be conflicted via ancestors which we may never be able to detect
-        if (nDepth == 0 && !wtx.InMempool())
-            continue;
+        // Unconfirmed transactions
+        size_t ancestor_count = 0;
+        size_t descendant_count = 0;
+        if (nDepth == 0) {
+            // We should not consider coins which aren't at least in our mempool
+            // It's possible for these to be conflicted via ancestors which we may never be able to detect
+            if (!wtx.InMempool()) {
+                continue;
+            }
+
+            // Get mempool info
+            wallet.chain().getTransactionAncestry(wtxid, ancestor_count, descendant_count);
+        }
 
         bool safeTx = CachedTxIsTrusted(wallet, wtx, trusted_parents);
 
@@ -190,6 +210,27 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
             bool solvable = provider ? IsSolvable(*provider, wtx.tx->vout[i].scriptPubKey) : false;
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
             int input_bytes = GetTxSpendSize(wallet, wtx, i, (coinControl && coinControl->fAllowWatchOnly));
+
+            // Split unconfirmed txs based on the filtering conditions.
+            if (split_mempool_outs && vUnconfCoins) {
+                if (ancestor_count >= coinControl->m_mempool_filter->max_ancestors_count ||
+                    descendant_count >= coinControl->m_mempool_filter->max_descendants_count) {
+
+                    vUnconfCoins->emplace_back(
+                            COutPoint(wtx.GetHash(), i),
+                            wtx.tx->vout.at(i),
+                            nDepth,
+                            input_bytes,
+                            spendable,
+                            solvable,
+                            safeTx,
+                            wtx.GetTxTime(),
+                            tx_from_me,
+                            MempoolInfo{ancestor_count, descendant_count});
+                    // Do not add it to the available set.
+                    continue;
+                }
+            }
 
             vCoins.emplace_back(COutPoint(wtx.GetHash(), i), wtx.tx->vout.at(i), nDepth, input_bytes, spendable, solvable, safeTx, wtx.GetTxTime(), tx_from_me);
 

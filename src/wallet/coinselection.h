@@ -18,6 +18,12 @@ static constexpr CAmount CHANGE_LOWER{50000};
 //! upper bound for randomly-chosen target change amount
 static constexpr CAmount CHANGE_UPPER{1000000};
 
+//! Grouped mempool information
+struct MempoolInfo {
+    size_t ancestors_count = 0;
+    size_t descendants_count = 0;
+};
+
 /** A UTXO under consideration for use in funding a new transaction. */
 struct COutput {
     /** The outpoint identifying this UTXO */
@@ -64,7 +70,11 @@ struct COutput {
     /** The fee required to spend this output at the consolidation feerate. */
     CAmount long_term_fee{0};
 
-    COutput(const COutPoint& outpoint, const CTxOut& txout, int depth, int input_bytes, bool spendable, bool solvable, bool safe, int64_t time, bool from_me)
+    /** The mempool information of this output, presented only for unconfirmed outs (depth == 0) on the mempool. */
+    std::optional<MempoolInfo> m_mempool_info = std::nullopt;
+
+    COutput(const COutPoint& outpoint, const CTxOut& txout, int depth, int input_bytes, bool spendable,
+            bool solvable, bool safe, int64_t time, bool from_me, const std::optional<MempoolInfo>& mempool_info = std::nullopt)
         : outpoint{outpoint},
           txout{txout},
           depth{depth},
@@ -74,7 +84,8 @@ struct COutput {
           safe{safe},
           time{time},
           from_me{from_me},
-          effective_value{txout.nValue}
+          effective_value{txout.nValue},
+          m_mempool_info(mempool_info)
     {}
 
     std::string ToString() const;

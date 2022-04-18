@@ -84,7 +84,13 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
     return CalculateMaximumSignedTxSize(tx, wallet, txouts, coin_control);
 }
 
-void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const CCoinControl* coinControl, const CAmount& nMinimumAmount, const CAmount& nMaximumAmount, const CAmount& nMinimumSumAmount, const uint64_t nMaximumCount)
+void AvailableCoins(const CWallet& wallet,
+                    std::vector<COutput>& vCoins,
+                    const CCoinControl* coinControl,
+                    const CAmount& nMinimumAmount,
+                    const CAmount& nMaximumAmount,
+                    const CAmount& nMinimumSumAmount,
+                    const uint64_t nMaximumCount)
 {
     AssertLockHeld(wallet.cs_wallet);
 
@@ -96,6 +102,9 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
     const int min_depth = {coinControl ? coinControl->m_min_depth : DEFAULT_MIN_DEPTH};
     const int max_depth = {coinControl ? coinControl->m_max_depth : DEFAULT_MAX_DEPTH};
     const bool only_safe = {coinControl ? !coinControl->m_include_unsafe_inputs : true};
+
+    // If the mempool filter was set, skip out-of-bounds unconf txs.
+    const bool with_mempool_restriction = coinControl && coinControl->m_mempool_filter;
 
     std::set<uint256> trusted_parents;
     for (const auto& entry : wallet.mapWallet)
@@ -156,6 +165,22 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
             continue;
         }
 
+        // Now that the basic checks were performed, get the mempool info
+        size_t ancestor_count = 0;
+        size_t descendant_count = 0;
+        std::optional<MempoolInfo> mempool_info = std::nullopt;
+        if (nDepth == 0) {
+            wallet.chain().getTransactionAncestry(wtxid, ancestor_count, descendant_count);
+            if (ancestor_count > 0 || descendant_count > 0) {
+                // Skip unconfirmed coins by the mempool restrictions
+                if (with_mempool_restriction && (ancestor_count >= coinControl->m_mempool_filter->max_ancestors_count ||
+                     descendant_count >= coinControl->m_mempool_filter->max_descendants_count)) {
+                    continue;
+                }
+                mempool_info = std::optional<MempoolInfo>(MempoolInfo{ancestor_count, descendant_count});
+            }
+        }
+
         bool tx_from_me = CachedTxIsFromMe(wallet, wtx, ISMINE_ALL);
 
         for (unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
@@ -192,7 +217,15 @@ void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const C
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
             int input_bytes = GetTxSpendSize(wallet, wtx, i, (coinControl && coinControl->fAllowWatchOnly));
 
-            vCoins.emplace_back(COutPoint(wtx.GetHash(), i), wtx.tx->vout.at(i), nDepth, input_bytes, spendable, solvable, safeTx, wtx.GetTxTime(), tx_from_me);
+            vCoins.emplace_back(COutPoint(wtx.GetHash(), i),
+                                wtx.tx->vout.at(i),
+                                nDepth, input_bytes,
+                                spendable,
+                                solvable,
+                                safeTx,
+                                wtx.GetTxTime(),
+                                tx_from_me,
+                                mempool_info);
 
             // Checks the sum amount of all UTXO's.
             if (nMinimumSumAmount != MAX_MONEY) {

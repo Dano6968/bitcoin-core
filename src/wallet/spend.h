@@ -34,9 +34,14 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* walle
 TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* wallet, const CCoinControl* coin_control = nullptr) EXCLUSIVE_LOCKS_REQUIRED(wallet->cs_wallet);
 
 /**
- * populate vCoins with vector of available COutputs.
+ * Populate vCoins with vector of available COutputs.
  */
-void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins, const CCoinControl* coinControl = nullptr, const CAmount& nMinimumAmount = 1, const CAmount& nMaximumAmount = MAX_MONEY, const CAmount& nMinimumSumAmount = MAX_MONEY, const uint64_t nMaximumCount = 0) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
+void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins,
+                    const CCoinControl* coinControl = nullptr,
+                    const CAmount& nMinimumAmount = 1,
+                    const CAmount& nMaximumAmount = MAX_MONEY,
+                    const CAmount& nMinimumSumAmount = MAX_MONEY,
+                    const uint64_t nMaximumCount = 0) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
 CAmount GetAvailableBalance(const CWallet& wallet, const CCoinControl* coinControl = nullptr);
 

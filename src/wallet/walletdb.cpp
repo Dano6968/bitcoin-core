@@ -482,7 +482,6 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
         } else if (strType == DBKeys::KEY) {
             wss.nKeys++;
         } else if (strType == DBKeys::MASTER_KEY) {
-            if (!LoadEncryptionKey(pwallet, ssKey, ssValue, strErr)) return false;
         } else if (strType == DBKeys::CRYPTED_KEY) {
             wss.fIsEncrypted = true;
             wss.nCKeys++;
@@ -871,13 +870,13 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
     // We don't want or need the default key, but if there is one set,
     // we want to make sure that it is valid so that we can detect corruption
     CPubKey default_pubkey;
-    if (m_batch->Read(DBKeys::DEFAULTKEY, default_pubkey) && !default_pubkey.IsValid()) {
+    if (batch.Read(DBKeys::DEFAULTKEY, default_pubkey) && !default_pubkey.IsValid()) {
         pwallet->WalletLogPrintf("Error reading wallet database: Default Key corrupt\n");
         return DBErrors::CORRUPT;
     }
 
     // "wkey" records are unsupported, if we see any, throw an error
-    cursor = GetTypeCursor(DBKeys::OLD_KEY);
+    cursor = GetTypeCursor(batch, DBKeys::OLD_KEY);
     if (!cursor) {
         pwallet->WalletLogPrintf("Error getting database cursor for wkey (old_key) entries\n");
         return DBErrors::CORRUPT;
@@ -1404,6 +1403,42 @@ static DBErrors LoadActiveSPKMs(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIV
     return result;
 }
 
+static DBErrors LoadDecryptionKeys(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+{
+    AssertLockHeld(pwallet->cs_wallet);
+    DBErrors result = DBErrors::LOAD_OK;
+    CDataStream ssKey(SER_DISK, CLIENT_VERSION);
+    CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+
+    // Load decryption key (mkey) records
+    std::unique_ptr<DatabaseCursor> cursor = GetTypeCursor(batch, DBKeys::MASTER_KEY);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for decryption keys\n");
+        return DBErrors::CORRUPT;
+    }
+
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next decryption key record for wallet database\n");
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == DBKeys::MASTER_KEY);
+        std::string err;
+        if (!LoadEncryptionKey(pwallet, ssKey, ssValue, err)) {
+            pwallet->WalletLogPrintf("%s\n", err);
+            return DBErrors::CORRUPT;
+        }
+    }
+    cursor.reset();
+    return result;
+}
+
 DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 {
     CWalletScanState wss;
@@ -1450,6 +1485,9 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
         // Load SPKMs
         result = std::max(LoadActiveSPKMs(pwallet, *m_batch), result);
+
+        // Load decryption keys
+        result = std::max(LoadDecryptionKeys(pwallet, *m_batch), result);
 
         // Get cursor
         std::unique_ptr<DatabaseCursor> cursor = m_batch->GetCursor();

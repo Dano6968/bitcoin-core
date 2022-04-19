@@ -338,8 +338,11 @@ std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<C
             // Skip outputs we cannot spend
             if (!output.spendable) continue;
 
-            size_t ancestors, descendants;
-            wallet.chain().getTransactionAncestry(output.outpoint.hash, ancestors, descendants);
+            size_t ancestors{0}, descendants{0};
+            if (output.m_mempool_info) {
+                ancestors = output.m_mempool_info->ancestors_count;
+                descendants = output.m_mempool_info->descendants_count;
+            }
 
             // Make an OutputGroup containing just this output
             OutputGroup group{coin_sel_params};
@@ -363,8 +366,11 @@ std::vector<OutputGroup> GroupOutputs(const CWallet& wallet, const std::vector<C
         // Skip outputs we cannot spend
         if (!output.spendable) continue;
 
-        size_t ancestors, descendants;
-        wallet.chain().getTransactionAncestry(output.outpoint.hash, ancestors, descendants);
+        size_t ancestors{0}, descendants{0};
+        if (output.m_mempool_info) {
+            ancestors = output.m_mempool_info->ancestors_count;
+            descendants = output.m_mempool_info->descendants_count;
+        }
         CScript spk = output.txout.scriptPubKey;
 
         std::vector<OutputGroup>& groups = spk_to_groups_map[spk];

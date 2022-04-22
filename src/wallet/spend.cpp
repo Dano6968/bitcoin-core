@@ -84,18 +84,16 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
     return CalculateMaximumSignedTxSize(tx, wallet, txouts, coin_control);
 }
 
-void AvailableCoins(const CWallet& wallet,
-                    std::vector<COutput>& vCoins,
+CoinsResult AvailableCoins(const CWallet& wallet,
                     const CCoinControl* coinControl,
                     const CAmount& nMinimumAmount,
                     const CAmount& nMaximumAmount,
                     const CAmount& nMinimumSumAmount,
-                    const uint64_t nMaximumCount,
-                    bool* has_long_chain_of_unconf)
+                    const uint64_t nMaximumCount)
 {
     AssertLockHeld(wallet.cs_wallet);
 
-    vCoins.clear();
+    CoinsResult result;
     CAmount nTotal = 0;
     // Either the WALLET_FLAG_AVOID_REUSE flag is not set (in which case we always allow), or we default to avoiding, and only in the case where
     // a coin control object is provided, and has the avoid address reuse flag set to false, do we allow already used addresses
@@ -177,7 +175,7 @@ void AvailableCoins(const CWallet& wallet,
                 // Skip unconfirmed coins by the mempool restrictions
                 if (with_mempool_restriction && (ancestor_count >= coinControl->m_mempool_filter->max_ancestors_count ||
                      descendant_count >= coinControl->m_mempool_filter->max_descendants_count)) {
-                    if (has_long_chain_of_unconf) *has_long_chain_of_unconf = true; // alert user about a long chain of unconf txs.
+                    result.has_long_chain_of_unconf = true; // alert user about a long chain of unconf txs.
                     continue;
                 }
                 mempool_info = std::optional<MempoolInfo>(MempoolInfo{ancestor_count, descendant_count});
@@ -220,7 +218,7 @@ void AvailableCoins(const CWallet& wallet,
             bool spendable = ((mine & ISMINE_SPENDABLE) != ISMINE_NO) || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && (coinControl && coinControl->fAllowWatchOnly && solvable));
             int input_bytes = GetTxSpendSize(wallet, wtx, i, (coinControl && coinControl->fAllowWatchOnly));
 
-            vCoins.emplace_back(COutPoint(wtx.GetHash(), i),
+            result.coins.emplace_back(COutPoint(wtx.GetHash(), i),
                                 wtx.tx->vout.at(i),
                                 nDepth, input_bytes,
                                 spendable,
@@ -235,16 +233,18 @@ void AvailableCoins(const CWallet& wallet,
                 nTotal += wtx.tx->vout[i].nValue;
 
                 if (nTotal >= nMinimumSumAmount) {
-                    return;
+                    return result;
                 }
             }
 
             // Checks the maximum number of UTXO's.
-            if (nMaximumCount > 0 && vCoins.size() >= nMaximumCount) {
-                return;
+            if (nMaximumCount > 0 && result.coins.size() >= nMaximumCount) {
+                return result;
             }
         }
     }
+
+    return result;
 }
 
 CAmount GetAvailableBalance(const CWallet& wallet, const CCoinControl* coinControl)
@@ -252,9 +252,7 @@ CAmount GetAvailableBalance(const CWallet& wallet, const CCoinControl* coinContr
     LOCK(wallet.cs_wallet);
 
     CAmount balance = 0;
-    std::vector<COutput> vCoins;
-    AvailableCoins(wallet, vCoins, coinControl);
-    for (const COutput& out : vCoins) {
+    for (const COutput& out : AvailableCoins(wallet, coinControl).coins) {
         if (out.spendable) {
             balance += out.txout.nValue;
         }
@@ -291,11 +289,8 @@ std::map<CTxDestination, std::vector<COutput>> ListCoins(const CWallet& wallet)
     AssertLockHeld(wallet.cs_wallet);
 
     std::map<CTxDestination, std::vector<COutput>> result;
-    std::vector<COutput> availableCoins;
 
-    AvailableCoins(wallet, availableCoins);
-
-    for (const COutput& coin : availableCoins) {
+    for (const COutput& coin : AvailableCoins(wallet).coins) {
         CTxDestination address;
         if ((coin.spendable || (wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && coin.solvable)) &&
             ExtractDestination(FindNonChangeParentOutput(wallet, coin.outpoint).scriptPubKey, address)) {
@@ -822,17 +817,15 @@ static CallResult<CTransactionRef> CreateTransactionInternal(
     CAmount selection_target = recipients_sum + not_input_fees;
 
     // Get available coins
-    std::vector<COutput> vAvailableCoins;
-    bool has_long_chains_of_unconf = false;
-    AvailableCoins(wallet, vAvailableCoins, &coin_control, 1, MAX_MONEY, MAX_MONEY, 0, &has_long_chains_of_unconf);
+    auto res_available_coins = AvailableCoins(wallet, &coin_control, 1, MAX_MONEY, MAX_MONEY, 0);
 
     // Choose coins to use
-    auto selection_res = SelectCoins(wallet, vAvailableCoins, /*nTargetValue=*/selection_target, coin_control, coin_selection_params);
+    auto selection_res = SelectCoins(wallet, res_available_coins.coins, /*nTargetValue=*/selection_target, coin_control, coin_selection_params);
     if (!selection_res) {
         bilingual_str extra_info;
         if (!selection_res.GetError().empty()) {
             extra_info = Untranslated(": ") + selection_res.GetError();
-        } else if (has_long_chains_of_unconf) {
+        } else if (res_available_coins.has_long_chain_of_unconf) {
                 extra_info = Untranslated(": ") +
                              _("Unconfirmed UTXOs are available, but spending them creates a chain of transactions that will be rejected by the mempool."
                                " These funds will become available when the transaction/s confirms");

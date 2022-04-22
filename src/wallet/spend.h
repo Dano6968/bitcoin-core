@@ -33,19 +33,22 @@ struct TxSize {
 TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* wallet, const std::vector<CTxOut>& txouts, const CCoinControl* coin_control = nullptr);
 TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* wallet, const CCoinControl* coin_control = nullptr) EXCLUSIVE_LOCKS_REQUIRED(wallet->cs_wallet);
 
+struct CoinsResult {
+    std::vector<COutput> coins;
+    bool has_long_chain_of_unconf{false};
+};
 /**
- * Populate vCoins with vector of available COutputs.
+ * Return vector of available COutputs.
  *
  * If the mempool filter inside CoinControl is set, 'has_long_chain_of_unconf' will be set to true
  * if there is at least one coin that is available and exceeds the max ancestors/descendants limit.
  */
-void AvailableCoins(const CWallet& wallet, std::vector<COutput>& vCoins,
+CoinsResult AvailableCoins(const CWallet& wallet,
                     const CCoinControl* coinControl = nullptr,
                     const CAmount& nMinimumAmount = 1,
                     const CAmount& nMaximumAmount = MAX_MONEY,
                     const CAmount& nMinimumSumAmount = MAX_MONEY,
-                    const uint64_t nMaximumCount = 0,
-                    bool* has_long_chain_of_unconf = nullptr) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
+                    const uint64_t nMaximumCount = 0) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 
 CAmount GetAvailableBalance(const CWallet& wallet, const CCoinControl* coinControl = nullptr);
 

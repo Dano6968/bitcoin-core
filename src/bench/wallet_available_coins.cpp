@@ -107,10 +107,9 @@ static void WalletAvailableCoins(benchmark::Bench& bench, const std::vector<Outp
 
     bench.epochIterations(5).run([&] {
         LOCK(wallet.cs_wallet);
-        std::vector<wallet::COutput> vCoins;
-        wallet::AvailableCoins(wallet, vCoins);
+        auto res_coins = wallet::AvailableCoins(wallet);
 
-        assert(vCoins.size() == (chain_size - COINBASE_MATURITY));
+        assert(res_coins.coins.size() == (chain_size - COINBASE_MATURITY));
     });
 }
 

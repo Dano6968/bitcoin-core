@@ -487,6 +487,16 @@ public:
         const CChain& active = Assert(m_node.chainman)->ActiveChain();
         return active.GetLocator();
     }
+    std::optional<CBlockLocator> getLocator(const uint256& block_hash) override
+    {
+        LOCK(cs_main);
+        const CChain& active = Assert(m_node.chainman)->ActiveChain();
+        const CBlockIndex* index = m_node.chainman->m_blockman.LookupBlockIndex(block_hash);
+
+        if (!index) return std::nullopt;
+
+        return active.GetLocator(index);
+    }
     std::optional<int> findLocatorFork(const CBlockLocator& locator) override
     {
         LOCK(cs_main);

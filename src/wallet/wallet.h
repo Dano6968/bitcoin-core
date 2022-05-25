@@ -13,6 +13,7 @@
 #include <outputtype.h>
 #include <policy/feerate.h>
 #include <psbt.h>
+#include <result.h>
 #include <tinyformat.h>
 #include <util/message.h>
 #include <util/strencodings.h>
@@ -642,8 +643,8 @@ public:
      */
     void MarkDestinationsDirty(const std::set<CTxDestination>& destinations) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    bool GetNewDestination(const OutputType type, const std::string label, CTxDestination& dest, bilingual_str& error);
-    bool GetNewChangeDestination(const OutputType type, CTxDestination& dest, bilingual_str& error);
+    BResult<CTxDestination> GetNewDestination(const OutputType type, const std::string label);
+    BResult<CTxDestination> GetNewChangeDestination(const OutputType type);
 
     isminetype IsMine(const CTxDestination& dest) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     isminetype IsMine(const CScript& script) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);

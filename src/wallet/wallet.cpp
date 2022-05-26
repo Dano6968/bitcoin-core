@@ -1730,12 +1730,6 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
     int block_height = start_height;
     while (!fAbortRescan && !chain().shutdownRequested()) {
 
-        bool next_interval = false;
-        if (Clock::now() >= current_time + INTERVAL_TIME) {
-            next_interval = true;
-            current_time = Clock::now();
-        }
-
         if (progress_end - progress_begin > 0.0) {
             m_scanning_progress = (progress_current - progress_begin) / (progress_end - progress_begin);
         } else { // avoid divide-by-zero for single block scan range (i.e. start and stop hashes are equal)
@@ -1744,7 +1738,10 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
         if (block_height % 100 == 0 && progress_end - progress_begin > 0.0) {
             ShowProgress(strprintf("%s " + _("Rescanning…").translated, GetDisplayName()), std::max(1, std::min(99, (int)(m_scanning_progress * 100))));
         }
+
+        bool next_interval = Clock::now() >= current_time + INTERVAL_TIME;
         if (next_interval) {
+            current_time = Clock::now();
             WalletLogPrintf("Still rescanning. At block %d. Progress=%f\n", block_height, progress_current);
         }
 
@@ -1775,10 +1772,9 @@ CWallet::ScanResult CWallet::ScanForWalletTransactions(const uint256& start_bloc
             result.last_scanned_block = block_hash;
             result.last_scanned_height = block_height;
 
+            // if needed, save progress
             if (save_progress && next_interval) {
-                auto loc = m_chain->getLocator(block_hash);
-
-                if (loc) {
+                if (auto loc = m_chain->getLocator(block_hash)) {
                     WalletBatch batch(GetDatabase());
                     batch.WriteBestBlock(loc.value());
                 }

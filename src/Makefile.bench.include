@@ -73,6 +73,7 @@ endif
 
 if ENABLE_WALLET
 bench_bench_bitcoin_SOURCES += bench/coin_selection.cpp
+bench_bench_bitcoin_SOURCES += bench/wallet_available_coins.cpp
 bench_bench_bitcoin_SOURCES += bench/wallet_balance.cpp
 bench_bench_bitcoin_SOURCES += bench/wallet_loading.cpp
 endif

@@ -27,4 +27,12 @@ std::string getnewaddress(CWallet& w)
     return EncodeDestination(dest);
 }
 
+CTxDestination getnewaddress(CWallet& w, OutputType output_type)
+{
+    CTxDestination dest;
+    bilingual_str error;
+    if (!w.GetNewDestination(output_type, "", dest, error)) assert(false);
+    return dest;
+}
+
 #endif // ENABLE_WALLET

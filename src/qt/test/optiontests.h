@@ -16,9 +16,9 @@ class OptionTests : public QObject
     Q_OBJECT
 public:
     explicit OptionTests(interfaces::Node& node);
-    void resetArgs();
 
 private Q_SLOTS:
+    void init(); // called before each test function execution.
     void migrateSettings();
     void integerGetArgBug();
     void parametersInteraction();

@@ -20,16 +20,15 @@ OptionTests::OptionTests(interfaces::Node& node) : m_node(node)
     gArgs.LockSettings([&](util::Settings& s) { m_previous_settings = s; });
 }
 
-void OptionTests::resetArgs()
+void OptionTests::init()
 {
+    // reset args
     gArgs.LockSettings([&](util::Settings& s) { s = m_previous_settings; });
     gArgs.ClearPathCache();
 }
 
 void OptionTests::migrateSettings()
 {
-    resetArgs();
-
     // Set legacy QSettings and verify that they get cleared and migrated to
     // settings.json
     QSettings settings;
@@ -73,8 +72,6 @@ void OptionTests::migrateSettings()
 
 void OptionTests::integerGetArgBug()
 {
-    resetArgs();
-
     // Test regression https://github.com/bitcoin/bitcoin/issues/24457. Ensure
     // that setting integer prune value doesn't cause an exception to be thrown
     // in the OptionsModel constructor
@@ -93,8 +90,6 @@ void OptionTests::integerGetArgBug()
 
 void OptionTests::parametersInteraction()
 {
-    resetArgs();
-
     // Test that the bug https://github.com/bitcoin-core/gui/issues/567 does not resurface.
     // It was fixed via https://github.com/bitcoin-core/gui/pull/568.
     // With fListen=false in ~/.config/Bitcoin/Bitcoin-Qt.conf and all else left as default,

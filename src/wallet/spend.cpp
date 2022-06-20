@@ -476,18 +476,11 @@ std::optional<SelectionResult> AttemptSelection(const CWallet& wallet, const CAm
 {
     // Run coin selection on each OutputType and compute the Waste Metric
     std::vector<SelectionResult> results;
-    if (auto result{ChooseSelectionResult(wallet, nTargetValue, eligibility_filter, available_coins.legacy, coin_selection_params)}) {
-        results.push_back(*result);
-    };
-    if (auto result{ChooseSelectionResult(wallet, nTargetValue, eligibility_filter, available_coins.P2SH_segwit, coin_selection_params)}) {
-        results.push_back(*result);
-    };
-    if (auto result{ChooseSelectionResult(wallet, nTargetValue, eligibility_filter, available_coins.bech32, coin_selection_params)}) {
-        results.push_back(*result);
-    };
-    if (auto result{ChooseSelectionResult(wallet, nTargetValue, eligibility_filter, available_coins.bech32m, coin_selection_params)}) {
-        results.push_back(*result);
-    };
+    for (const auto& it : available_coins.coins) {
+        if (auto result{ChooseSelectionResult(wallet, nTargetValue, eligibility_filter, it.second, coin_selection_params)}) {
+            results.push_back(*result);
+        }
+    }
 
     // If we can't fund the transaction from any individual OutputType, run coin selection
     // over all available coins, else pick the best solution from the results

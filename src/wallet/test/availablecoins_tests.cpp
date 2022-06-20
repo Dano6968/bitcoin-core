@@ -67,7 +67,7 @@ BOOST_FIXTURE_TEST_CASE(BasicOutputTypesTest, AvailableCoinsTestingSetup)
     // This UTXO is a P2PK, so it should show up in the Other bucket
     available_coins = AvailableCoins(*wallet);
     BOOST_CHECK_EQUAL(available_coins.size(), 1U);
-    BOOST_CHECK_EQUAL(available_coins.other.size(), 1U);
+    BOOST_CHECK_EQUAL(available_coins.coins[OutputType::OTHER].size(), 1U);
 
     // We will create a self transfer for each of the OutputTypes and
     // verify it is put in the correct bucket after running GetAvailablecoins
@@ -80,25 +80,25 @@ BOOST_FIXTURE_TEST_CASE(BasicOutputTypesTest, AvailableCoinsTestingSetup)
     wallet->GetNewDestination(OutputType::BECH32M, "", dest, error);
     AddTx(CRecipient{{GetScriptForDestination(dest)}, 1 * COIN, /*fSubtractFeeFromAmount=*/true});
     available_coins = AvailableCoins(*wallet);
-    BOOST_CHECK_EQUAL(available_coins.bech32m.size(), 2U);
+    BOOST_CHECK_EQUAL(available_coins.coins[OutputType::BECH32M].size(), 2U);
 
     // Bech32
     wallet->GetNewDestination(OutputType::BECH32, "", dest, error);
     AddTx(CRecipient{{GetScriptForDestination(dest)}, 2 * COIN, /*fSubtractFeeFromAmount=*/true});
     available_coins = AvailableCoins(*wallet);
-    BOOST_CHECK_EQUAL(available_coins.bech32.size(), 2U);
+    BOOST_CHECK_EQUAL(available_coins.coins[OutputType::BECH32].size(), 2U);
 
     // P2SH-SEGWIT
     wallet->GetNewDestination(OutputType::P2SH_SEGWIT, "", dest, error);
     AddTx(CRecipient{{GetScriptForDestination(dest)}, 3 * COIN, /*fSubtractFeeFromAmount=*/true});
     available_coins = AvailableCoins(*wallet);
-    BOOST_CHECK_EQUAL(available_coins.P2SH_segwit.size(), 2U);
+    BOOST_CHECK_EQUAL(available_coins.coins[OutputType::P2SH_SEGWIT].size(), 2U);
 
     // Legacy (P2PKH)
     wallet->GetNewDestination(OutputType::LEGACY, "", dest, error);
     AddTx(CRecipient{{GetScriptForDestination(dest)}, 4 * COIN, /*fSubtractFeeFromAmount=*/true});
     available_coins = AvailableCoins(*wallet);
-    BOOST_CHECK_EQUAL(available_coins.legacy.size(), 2U);
+    BOOST_CHECK_EQUAL(available_coins.coins[OutputType::LEGACY].size(), 2U);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

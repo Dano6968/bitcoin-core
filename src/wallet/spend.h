@@ -44,13 +44,7 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction& tx, const CWallet* walle
  */
 struct CoinsResult {
     /* Vectors for each OutputType */
-    std::vector<COutput> legacy;
-    std::vector<COutput> P2SH_segwit;
-    std::vector<COutput> bech32;
-    std::vector<COutput> bech32m;
-
-    /** Other is a catch all for anything that doesn't match the known OutputTypes */
-    std::vector<COutput> other;
+    std::map<OutputType, std::vector<COutput>> coins;
 
     /** Concatenate and return all COutputs as one vector */
     std::vector<COutput> all() const;
@@ -59,6 +53,7 @@ struct CoinsResult {
      * i.e methods can work with invidivudal OutputType vectors or on the entire object */
     uint64_t size() const;
     void clear();
+    void push_back(OutputType type, const COutput& out);
 
     /** Sum of all available coins **/
     CAmount total_amount{0};

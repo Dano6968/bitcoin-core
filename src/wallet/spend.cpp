@@ -86,28 +86,49 @@ TxSize CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *walle
 
 uint64_t CoinsResult::size() const
 {
-    return bech32m.size() + bech32.size() + P2SH_segwit.size() + legacy.size() + other.size();
+    uint64_t size = 0;
+    for (const auto& it : coins) {
+        size += it.second.size();
+    }
+    return size;
 }
 
 std::vector<COutput> CoinsResult::all() const
 {
     std::vector<COutput> all;
-    all.reserve(this->size());
-    all.insert(all.end(), bech32m.begin(), bech32m.end());
-    all.insert(all.end(), bech32.begin(), bech32.end());
-    all.insert(all.end(), P2SH_segwit.begin(), P2SH_segwit.end());
-    all.insert(all.end(), legacy.begin(), legacy.end());
-    all.insert(all.end(), other.begin(), other.end());
+    for (const auto& it : coins) {
+        all.insert(all.end(), it.second.begin(), it.second.end());
+    }
     return all;
 }
 
 void CoinsResult::clear()
 {
-    bech32m.clear();
-    bech32.clear();
-    P2SH_segwit.clear();
-    legacy.clear();
-    other.clear();
+    coins.clear();
+}
+
+void CoinsResult::push_back(OutputType type, const COutput& out)
+{
+    coins[type].emplace_back(out);
+}
+
+static OutputType convertToType(TxoutType type, bool is_from_p2sh)
+{
+    switch (type) {
+        case TxoutType::WITNESS_V1_TAPROOT:
+            return OutputType::BECH32M;
+        case TxoutType::WITNESS_V0_KEYHASH:
+        case TxoutType::WITNESS_V0_SCRIPTHASH:
+            if (is_from_p2sh) return OutputType::P2SH_SEGWIT;
+            else return OutputType::BECH32;
+            break;
+        case TxoutType::SCRIPTHASH:
+        case TxoutType::PUBKEYHASH:
+            return OutputType::LEGACY;
+            break;
+        default:
+            return OutputType::OTHER;
+    }
 }
 
 CoinsResult AvailableCoins(const CWallet& wallet,
@@ -230,44 +251,26 @@ CoinsResult AvailableCoins(const CWallet& wallet,
             if (!spendable && only_spendable) continue;
 
             int input_bytes = GetTxSpendSize(wallet, wtx, i, (coinControl && coinControl->fAllowWatchOnly));
+
+            COutput coin(outpoint, output, nDepth, input_bytes, spendable, solvable, safeTx, wtx.GetTxTime(), tx_from_me, feerate);
+
             // When parsing a scriptPubKey, Solver returns the parsed pubkeys or hashes (depending on the script)
             // We don't need those here, so we are leaving them in return_values_unused
             std::vector<std::vector<uint8_t>> return_values_unused;
-            TxoutType type;
             bool is_from_p2sh{false};
-
-            if (wtx.tx->vout[i].scriptPubKey.IsPayToScriptHash()) {
-                CScript redeemScript;
+            CScript script;
+            if (output.scriptPubKey.IsPayToScriptHash()) {
                 CTxDestination destination;
-                ExtractDestination(wtx.tx->vout[i].scriptPubKey, destination);
+                ExtractDestination(output.scriptPubKey, destination);
                 const CScriptID& hash = CScriptID(std::get<ScriptHash>(destination));
-                provider->GetCScript(hash, redeemScript);
-                type = Solver(redeemScript, return_values_unused);
+                provider->GetCScript(hash, script);
                 is_from_p2sh = true;
             } else {
-                type = Solver(wtx.tx->vout[i].scriptPubKey, return_values_unused);
-            };
+                script = output.scriptPubKey;
+            }
 
-            COutput coin(COutPoint(wtx.GetHash(), i), wtx.tx->vout.at(i), nDepth, input_bytes, spendable, solvable, safeTx, wtx.GetTxTime(), tx_from_me, feerate);
-            switch (type) {
-            case TxoutType::WITNESS_V1_TAPROOT:
-                result.bech32m.push_back(coin);
-                break;
-            case TxoutType::WITNESS_V0_KEYHASH:
-            case TxoutType::WITNESS_V0_SCRIPTHASH:
-                if (is_from_p2sh) {
-                    result.P2SH_segwit.push_back(coin);
-                    break;
-                }
-                result.bech32.push_back(coin);
-                break;
-            case TxoutType::SCRIPTHASH:
-            case TxoutType::PUBKEYHASH:
-                result.legacy.push_back(coin);
-                break;
-            default:
-                result.other.push_back(coin);
-            };
+            TxoutType type = Solver(script, return_values_unused);
+            result.push_back(convertToType(type, is_from_p2sh), coin);
 
             // Cache total amount as we go
             result.total_amount += output.nValue;

@@ -54,9 +54,12 @@ struct CoinsResult {
     uint64_t size() const;
     void clear();
     void push_back(OutputType type, const COutput& out);
+    void erase(std::set<COutPoint>& preset_coins);
 
     /** Sum of all available coins **/
     CAmount total_amount{0};
+
+    void shuffle(FastRandomContext &rng_fast);
 };
 
 /**

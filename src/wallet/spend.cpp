@@ -112,6 +112,21 @@ void CoinsResult::push_back(OutputType type, const COutput& out)
     coins[type].emplace_back(out);
 }
 
+void CoinsResult::erase(std::set<COutPoint>& preset_coins)
+{
+    for (auto& it : coins) {
+        auto& vec = it.second;
+        vec.erase(remove_if(vec.begin(), vec.end(), [&](const COutput &c) { return preset_coins.count(c.outpoint); }), vec.end());
+    }
+}
+
+void CoinsResult::shuffle(FastRandomContext& rng_fast)
+{
+    for (auto& it : coins) {
+        Shuffle(it.second.begin(), it.second.end(), rng_fast);
+    }
+}
+
 static OutputType convertToType(TxoutType type, bool is_from_p2sh)
 {
     switch (type) {
@@ -577,11 +592,7 @@ std::optional<SelectionResult> SelectCoins(const CWallet& wallet, CoinsResult& a
 
     // remove preset inputs from coins so that Coin Selection doesn't pick them.
     if (coin_control.HasSelected()) {
-        available_coins.legacy.erase(remove_if(available_coins.legacy.begin(), available_coins.legacy.end(), [&](const COutput& c) { return preset_coins.count(c.outpoint); }), available_coins.legacy.end());
-        available_coins.P2SH_segwit.erase(remove_if(available_coins.P2SH_segwit.begin(), available_coins.P2SH_segwit.end(), [&](const COutput& c) { return preset_coins.count(c.outpoint); }), available_coins.P2SH_segwit.end());
-        available_coins.bech32.erase(remove_if(available_coins.bech32.begin(), available_coins.bech32.end(), [&](const COutput& c) { return preset_coins.count(c.outpoint); }), available_coins.bech32.end());
-        available_coins.bech32m.erase(remove_if(available_coins.bech32m.begin(), available_coins.bech32m.end(), [&](const COutput& c) { return preset_coins.count(c.outpoint); }), available_coins.bech32m.end());
-        available_coins.other.erase(remove_if(available_coins.other.begin(), available_coins.other.end(), [&](const COutput& c) { return preset_coins.count(c.outpoint); }), available_coins.other.end());
+        available_coins.erase(preset_coins);
     }
 
     unsigned int limit_ancestor_count = 0;
@@ -597,11 +608,7 @@ std::optional<SelectionResult> SelectCoins(const CWallet& wallet, CoinsResult& a
         // Cases where we have 101+ outputs all pointing to the same destination may result in
         // privacy leaks as they will potentially be deterministically sorted. We solve that by
         // explicitly shuffling the outputs before processing
-        Shuffle(available_coins.legacy.begin(), available_coins.legacy.end(), coin_selection_params.rng_fast);
-        Shuffle(available_coins.P2SH_segwit.begin(), available_coins.P2SH_segwit.end(), coin_selection_params.rng_fast);
-        Shuffle(available_coins.bech32.begin(), available_coins.bech32.end(), coin_selection_params.rng_fast);
-        Shuffle(available_coins.bech32m.begin(), available_coins.bech32m.end(), coin_selection_params.rng_fast);
-        Shuffle(available_coins.other.begin(), available_coins.other.end(), coin_selection_params.rng_fast);
+        available_coins.shuffle(coin_selection_params.rng_fast);
     }
 
     // Coin Selection attempts to select inputs from a pool of eligible UTXOs to fund the

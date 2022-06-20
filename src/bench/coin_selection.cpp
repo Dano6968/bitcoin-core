@@ -58,7 +58,7 @@ static void CoinSelection(benchmark::Bench& bench)
     // Create coins
     wallet::CoinsResult available_coins;
     for (const auto& wtx : wtxs) {
-        available_coins.bech32.emplace_back(COutPoint(wtx->GetHash(), 0), wtx->tx->vout.at(0), /*depth=*/6 * 24, GetTxSpendSize(wallet, *wtx, 0), /*spendable=*/true, /*solvable=*/true, /*safe=*/true, wtx->GetTxTime(), /*from_me=*/true, /*fees=*/ 0);
+        available_coins.push_back(OutputType::BECH32, COutput(COutPoint(wtx->GetHash(), 0), wtx->tx->vout.at(0), /*depth=*/6 * 24, GetTxSpendSize(wallet, *wtx, 0), /*spendable=*/true, /*solvable=*/true, /*safe=*/true, wtx->GetTxTime(), /*from_me=*/true, /*fees=*/ 0));
     }
 
     const CoinEligibilityFilter filter_standard(1, 6, 0);

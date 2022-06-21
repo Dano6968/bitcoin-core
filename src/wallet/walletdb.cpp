@@ -428,6 +428,27 @@ bool LoadEncryptionKey(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValu
     return true;
 }
 
+bool LoadScript(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr)
+{
+    LOCK(pwallet->cs_wallet);
+    try {
+        uint160 hash;
+        ssKey >> hash;
+        CScript script;
+        ssValue >> script;
+        if (!pwallet->GetOrCreateLegacyScriptPubKeyMan()->LoadCScript(script)) {
+            pwallet->WalletLogPrintf("Error reading wallet database: LegacyScriptPubKeyMan::LoadCScript failed\n");
+            return false;
+        }
+    } catch (const std::exception& e) {
+        if (strErr.empty()) {
+            strErr = e.what();
+        }
+        return false;
+    }
+    return true;
+}
+
 bool LoadHDChain(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strErr)
 {
     LOCK(pwallet->cs_wallet);
@@ -449,6 +470,39 @@ static std::unique_ptr<DatabaseCursor> GetTypeCursor(DatabaseBatch& batch, const
     prefix << type;
     std::unique_ptr<DatabaseCursor> cursor = batch.GetPrefixCursor(prefix);
     return cursor;
+}
+
+using LoadFunc = std::function<bool(CWallet* pwallet, CDataStream& key, CDataStream& value, std::string& err)>;
+static DBErrors LoadRecords(DatabaseBatch& batch, CWallet* pwallet, const std::string& key, std::string& err, LoadFunc&& load_func)
+{
+    CDataStream ssKey(SER_DISK, CLIENT_VERSION);
+    CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+
+    std::unique_ptr<DatabaseCursor> cursor = GetTypeCursor(batch, key);
+    if (!cursor) {
+        pwallet->WalletLogPrintf("Error getting database cursor for %s\n", key);
+        return DBErrors::CORRUPT;
+    }
+
+    int num_keys = 0;
+    while (true) {
+        bool complete;
+        bool ret = cursor->Next(ssKey, ssValue, complete);
+        if (complete) {
+            break;
+        } else if (!ret) {
+            pwallet->WalletLogPrintf("Error reading next %s record for wallet database\n", key);
+            return DBErrors::CORRUPT;
+        }
+        std::string type;
+        ssKey >> type;
+        assert(type == key);
+        if (!load_func(pwallet, ssKey, ssValue, err)) {
+            pwallet->WalletLogPrintf("%s\n", err);
+            return DBErrors::CORRUPT;
+        }
+    }
+    return DBErrors::LOAD_OK;
 }
 
 static DBErrors LoadMinVersion(CWallet* pwallet, DatabaseBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
@@ -488,93 +542,24 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
         pwallet->GetOrCreateLegacyScriptPubKeyMan()->LoadHDChain(chain);
     }
 
-    CDataStream ssKey(SER_DISK, CLIENT_VERSION);
-    CDataStream ssValue(SER_DISK, CLIENT_VERSION);
-
     // Load unencrypted keys
-    std::unique_ptr<DatabaseCursor> cursor = GetTypeCursor(batch, DBKeys::KEY);
-    if (!cursor) {
-        pwallet->WalletLogPrintf("Error getting database cursor for unencrypted keys\n");
-        return DBErrors::CORRUPT;
-    }
-
     int num_keys = 0;
-    while (true) {
-        bool complete;
-        bool ret = cursor->Next(ssKey, ssValue, complete);
-        if (complete) {
-            break;
-        } else if (!ret) {
-            pwallet->WalletLogPrintf("Error reading next unencrypted key record for wallet database\n");
-            return DBErrors::CORRUPT;
-        }
-        std::string type;
-        ssKey >> type;
-        assert(type == DBKeys::KEY);
-        if (!LoadKey(pwallet, ssKey, ssValue, err)) {
-            result = DBErrors::CORRUPT;
-            pwallet->WalletLogPrintf("%s\n", err);
-        }
-    }
-    cursor.reset();
+    LoadRecords(batch, pwallet, DBKeys::KEY, err, [&](CWallet* pwallet, CDataStream& key, CDataStream& value, std::string& err) {
+        num_keys++;
+        return LoadKey(pwallet, key, value, err);
+    });
 
     // Load encrypted keys
-    cursor = GetTypeCursor(batch, DBKeys::CRYPTED_KEY);
-    if (!cursor) {
-        pwallet->WalletLogPrintf("Error getting database cursor for crypted keys\n");
-        return DBErrors::CORRUPT;
-    }
-
     int num_ckeys = 0;
-    while (true) {
-        bool complete;
-        bool ret = cursor->Next(ssKey, ssValue, complete);
-        if (complete) {
-            break;
-        } else if (!ret) {
-            pwallet->WalletLogPrintf("Error reading next encrypted key record for wallet database\n");
-            return DBErrors::CORRUPT;
-        }
-        std::string type;
-        ssKey >> type;
-        assert(type == DBKeys::CRYPTED_KEY);
-        if (!LoadCryptedKey(pwallet, ssKey, ssValue, err)) {
-            result = DBErrors::CORRUPT;
-            pwallet->WalletLogPrintf("%s\n", err);
-        }
-    }
-    cursor.reset();
+    LoadRecords(batch, pwallet, DBKeys::CRYPTED_KEY, err, [&](CWallet* pwallet, CDataStream& key, CDataStream& value, std::string& err) {
+        num_ckeys++;
+        return LoadCryptedKey(pwallet, key, value, err);
+    });
 
     // Load scripts
-    cursor = GetTypeCursor(batch, DBKeys::CSCRIPT);
-    if (!cursor) {
-        pwallet->WalletLogPrintf("Error getting database cursor for scripts\n");
-        return DBErrors::CORRUPT;
-    }
-
-    while (true) {
-        bool complete;
-        bool ret = cursor->Next(ssKey, ssValue, complete);
-        if (complete) {
-            break;
-        } else if (!ret) {
-            pwallet->WalletLogPrintf("Error reading next script record for wallet database\n");
-            return DBErrors::CORRUPT;
-        }
-        std::string type;
-        ssKey >> type;
-        assert(type == DBKeys::CSCRIPT);
-        uint160 hash;
-        ssKey >> hash;
-        CScript script;
-        ssValue >> script;
-        if (!pwallet->GetOrCreateLegacyScriptPubKeyMan()->LoadCScript(script))
-        {
-            pwallet->WalletLogPrintf("Error reading wallet database: LegacyScriptPubKeyMan::LoadCScript failed\n");
-            return DBErrors::CORRUPT;
-        }
-    }
-    cursor.reset();
+    LoadRecords(batch, pwallet, DBKeys::CSCRIPT, err, [&](CWallet* pwallet, CDataStream& key, CDataStream& value, std::string& err) {
+        return LoadScript(pwallet, key, value, err);
+    });
 
     // Check whether rewrite is needed
     if (num_ckeys > 0) {
@@ -582,8 +567,11 @@ static DBErrors LoadLegacyWalletRecords(CWallet* pwallet, DatabaseBatch& batch, 
         if (last_client == 40000 || last_client == 50000) return DBErrors::NEED_REWRITE;
     }
 
+    CDataStream ssKey(SER_DISK, CLIENT_VERSION);
+    CDataStream ssValue(SER_DISK, CLIENT_VERSION);
+
     // Load keymeta
-    cursor = GetTypeCursor(batch, DBKeys::KEYMETA);
+    std::unique_ptr<DatabaseCursor> cursor = GetTypeCursor(batch, DBKeys::KEYMETA);
     if (!cursor) {
         pwallet->WalletLogPrintf("Error getting database cursor for key metadata\n");
         return DBErrors::CORRUPT;

@@ -321,7 +321,7 @@ public:
 };
 
 static bool
-ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
+ReadKeyValue(CWallet* pwallet, WalletBatch& batch, CDataStream& ssKey, CDataStream& ssValue,
              CWalletScanState &wss, std::string& strType, std::string& strErr, const KeyFilterFn& filter_fn = nullptr) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
 {
     try {
@@ -391,7 +391,7 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
 
                 return true;
             };
-            if (!pwallet->LoadToWallet(hash, fill_wtx)) {
+            if (!pwallet->LoadToWallet(batch, hash, fill_wtx)) {
                 return false;
             }
         } else if (strType == DBKeys::WATCHS) {
@@ -759,11 +759,11 @@ ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue,
     return true;
 }
 
-bool ReadKeyValue(CWallet* pwallet, CDataStream& ssKey, CDataStream& ssValue, std::string& strType, std::string& strErr, const KeyFilterFn& filter_fn)
+bool ReadKeyValue(CWallet* pwallet, WalletBatch& batch, CDataStream& ssKey, CDataStream& ssValue, std::string& strType, std::string& strErr, const KeyFilterFn& filter_fn)
 {
     CWalletScanState dummy_wss;
     LOCK(pwallet->cs_wallet);
-    return ReadKeyValue(pwallet, ssKey, ssValue, dummy_wss, strType, strErr, filter_fn);
+    return ReadKeyValue(pwallet, batch, ssKey, ssValue, dummy_wss, strType, strErr, filter_fn);
 }
 
 bool WalletBatch::IsKeyType(const std::string& strType)
@@ -837,7 +837,7 @@ DBErrors WalletBatch::LoadWallet(CWallet* pwallet)
 
             // Try to be tolerant of single corrupt records:
             std::string strType, strErr;
-            if (!ReadKeyValue(pwallet, ssKey, ssValue, wss, strType, strErr))
+            if (!ReadKeyValue(pwallet, *this, ssKey, ssValue, wss, strType, strErr))
             {
                 if (wss.unexpected_legacy_entry) {
                     strErr = strprintf("Error: Unexpected legacy entry found in descriptor wallet %s. ", pwallet->GetName());

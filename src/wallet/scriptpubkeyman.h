@@ -639,7 +639,7 @@ public:
     void UpdateWalletDescriptor(WalletDescriptor& descriptor);
     bool CanUpdateToWalletDescriptor(const WalletDescriptor& descriptor, std::string& error);
     void AddDescriptorKey(const CKey& key, const CPubKey &pubkey);
-    void WriteDescriptor();
+    void WriteDescriptor(WalletBatch& batch);
 
     const WalletDescriptor GetWalletDescriptor() const EXCLUSIVE_LOCKS_REQUIRED(cs_desc_man);
     const std::unordered_set<CScript, SaltedSipHasher> GetScriptPubKeys() const override;

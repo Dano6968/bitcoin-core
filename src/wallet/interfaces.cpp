@@ -361,13 +361,13 @@ public:
         int& num_blocks) override
     {
         LOCK(m_wallet->cs_wallet);
-        auto mi = m_wallet->mapWallet.find(txid);
-        if (mi != m_wallet->mapWallet.end()) {
+        const auto& wtx = m_wallet->GetWalletTx(txid);
+        if (wtx) {
             num_blocks = m_wallet->GetLastBlockHeight();
-            in_mempool = mi->second.InMempool();
-            order_form = mi->second.vOrderForm;
-            tx_status = MakeWalletTxStatus(*m_wallet, mi->second);
-            return MakeWalletTx(*m_wallet, mi->second);
+            in_mempool = wtx->InMempool();
+            order_form = wtx->vOrderForm;
+            tx_status = MakeWalletTxStatus(*m_wallet, *wtx);
+            return MakeWalletTx(*m_wallet, *wtx);
         }
         return {};
     }

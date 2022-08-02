@@ -7,6 +7,7 @@
 
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
+#include <outputtype.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -245,6 +246,27 @@ struct OutputGroup
 struct Groups {
     std::vector<OutputGroup> positive_group;
     std::vector<OutputGroup> mixed_group;
+};
+
+/** Stores several 'Groups' whose were mapped by output type. */
+struct OutputGroups
+{
+    // Map filters to output groups.
+    std::map<OutputType, Groups> groups_by_type;
+    // All groups, no filters
+    Groups all_groups;
+
+    enum class InsertGroupType {
+        ONLY_POSITIVE, // Insert only to `positive_group`
+        MIXED_GROUPS, // Insert only to `mixed_group`
+        BOTH // Insert to `positive_group` and `mixed_group`
+    };
+
+    // Depending on the 'insert_type', appends the output group into the 'by type' groups
+    // and/or the 'all groups' container.
+    void push(const OutputGroup& group, OutputType type, InsertGroupType insert_type);
+    // Retrieves 'Groups' filtered by type
+    std::optional<Groups> find(OutputType type);
 };
 
 /** Compute the waste for this result given the cost of change

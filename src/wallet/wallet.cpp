@@ -2468,11 +2468,10 @@ util::Result<CTxDestination> ReserveDestination::GetReservedDestination(bool int
     {
         m_spk_man->TopUp();
 
-        CKeyPool keypool;
-        auto op_address = m_spk_man->GetReservedDestination(type, internal, nIndex, keypool);
+        auto op_address = m_spk_man->GetReservedDestination(type, internal, nIndex);
         if (!op_address) return op_address;
         address = *op_address;
-        fInternal = keypool.fInternal;
+        fInternal = internal;
     }
     return address;
 }

@@ -635,10 +635,9 @@ RPCHelpMan listsinceblock()
     bool include_removed = (request.params[3].isNull() || request.params[3].get_bool());
     bool include_change = (!request.params[4].isNull() && request.params[4].get_bool());
 
-    std::optional<std::string> filter_label;
-    if (!request.params[5].isNull()) {
-        filter_label = request.params[5].get_str();
-    }
+    // Only set it if 'label' was provided.
+    std::optional<std::string> filter_label = request.params[5].isNull() ? std::nullopt :
+                                              std::optional(LabelFromValue(request.params[5]));
 
     int depth = height ? wallet.GetLastBlockHeight() + 1 - *height : -1;
 

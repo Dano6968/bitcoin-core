@@ -43,9 +43,7 @@ RPCHelpMan getnewaddress()
     }
 
     // Parse the label first so we don't generate a key if there's an error
-    std::string label;
-    if (!request.params[0].isNull())
-        label = LabelFromValue(request.params[0]);
+    std::string label{LabelFromValue(request.params[0])};
 
     OutputType output_type = pwallet->m_default_address_type;
     if (!request.params[1].isNull()) {
@@ -258,9 +256,7 @@ RPCHelpMan addmultisigaddress()
 
     LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
 
-    std::string label;
-    if (!request.params[2].isNull())
-        label = LabelFromValue(request.params[2]);
+    std::string label{LabelFromValue(request.params[2])};
 
     int required = request.params[0].getInt<int>();
 

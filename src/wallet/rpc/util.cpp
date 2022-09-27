@@ -132,6 +132,8 @@ const LegacyScriptPubKeyMan& EnsureConstLegacyScriptPubKeyMan(const CWallet& wal
 
 std::string LabelFromValue(const UniValue& value)
 {
+    if (value.isNull()) return ""; // empty
+
     std::string label = value.get_str();
     if (label == "*")
         throw JSONRPCError(RPC_WALLET_INVALID_LABEL_NAME, "Invalid label name");

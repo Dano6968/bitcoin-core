@@ -2252,6 +2252,7 @@ static RPCHelpMan scanblocks()
                 {RPCResult::Type::NUM, "from_height", "The height we started the scan from"},
                 {RPCResult::Type::NUM, "to_height", "The height we ended the scan at"},
                 {RPCResult::Type::ARR, "relevant_blocks", "", {{RPCResult::Type::STR_HEX, "blockhash", "A relevant blockhash"},}},
+                {RPCResult::Type::BOOL, "completed", "true if the scan process was not aborted"}
                 },
             },
             RPCResult{"when action=='status' and a scan is currently in progress", RPCResult::Type::OBJ, "", "", {
@@ -2290,8 +2291,7 @@ static RPCHelpMan scanblocks()
         // set the abort flag
         g_scanfilter_should_abort_scan = true;
         return true;
-    }
-    else if (request.params[0].get_str() == "start") {
+    } else if (request.params[0].get_str() == "start") {
         BlockFiltersScanReserver reserver;
         if (!reserver.reserve()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Scan already in progress, use action \"abort\" or \"status\"");
@@ -2355,12 +2355,13 @@ static RPCHelpMan scanblocks()
         g_scanfilter_should_abort_scan = false;
         g_scanfilter_progress = 0;
         g_scanfilter_progress_height = start_block_height;
+        bool completed = true;
 
         const CBlockIndex* end_range = start_index;
         do {
             node.rpc_interruption_point(); // allow a clean shutdown
             if (g_scanfilter_should_abort_scan) {
-                LogPrintf("scanblocks RPC aborted at height %d.\n", end_range->nHeight);
+                completed = false;
                 break;
             }
 
@@ -2369,13 +2370,11 @@ static RPCHelpMan scanblocks()
                     WITH_LOCK(::cs_main, return chainman.ActiveChain()[start_index->nHeight + amount_per_chunk]) :
                     stop_block;
 
-            LogPrint(BCLog::RPC, "Fetching blockfilters from height %d to height %d.\n", start_index->nHeight, end_range->nHeight);
             if (index->LookupFilterRange(start_index->nHeight, end_range, filters)) {
                 for (const BlockFilter& filter : filters) {
                     // compare the elements-set with each filter
                     if (filter.GetFilter().MatchAny(needle_set)) {
                         blocks.push_back(filter.GetBlockHash().GetHex());
-                        LogPrint(BCLog::RPC, "scanblocks: found match in %s\n", filter.GetBlockHash().GetHex());
                     }
                 }
             }
@@ -2394,8 +2393,9 @@ static RPCHelpMan scanblocks()
         } while (start_index != stop_block);
 
         ret.pushKV("from_height", start_block_height);
-        ret.pushKV("to_height", stop_block->nHeight);
+        ret.pushKV("to_height", start_index->nHeight); // start_index is always the last scanned block here
         ret.pushKV("relevant_blocks", blocks);
+        ret.pushKV("completed", completed);
     }
     else {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid command");

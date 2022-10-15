@@ -98,11 +98,11 @@ class ScanblocksTest(BitcoinTestFramework):
         # check here that it filters out the false-positive
 
         # test node with disabled blockfilterindex
-        assert_raises_rpc_error(-1, "Index is not enabled for filtertype basic",
+        assert_raises_rpc_error(-1, "Index is not enabled for filter_type basic",
                                 self.nodes[1].scanblocks, "start", [f"addr({addr_1})"])
 
-        # test unknown filtertype
-        assert_raises_rpc_error(-5, "Unknown filtertype",
+        # test unknown filter_type
+        assert_raises_rpc_error(-5, "Unknown filter_type",
                                 node.scanblocks, "start", [f"addr({addr_1})"], 0, 10, "extended")
 
         # test invalid start_height

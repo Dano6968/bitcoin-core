@@ -2278,7 +2278,7 @@ static RPCHelpMan scanblocks()
             scan_objects_arg_desc,
             RPCArg{"start_height", RPCArg::Type::NUM, RPCArg::Default{0}, "Height to start to scan from"},
             RPCArg{"stop_height", RPCArg::Type::NUM, RPCArg::DefaultHint{"chain tip"}, "Height to stop to scan"},
-            RPCArg{"filtertype", RPCArg::Type::STR, RPCArg::Default{BlockFilterTypeName(BlockFilterType::BASIC)}, "The type name of the filter"}
+            RPCArg{"filter_type", RPCArg::Type::STR, RPCArg::Default{BlockFilterTypeName(BlockFilterType::BASIC)}, "The type name of the filter"}
         },
         {
             scan_result_status_none,
@@ -2335,12 +2335,12 @@ static RPCHelpMan scanblocks()
 
         BlockFilterType filtertype;
         if (!BlockFilterTypeByName(filtertype_name, filtertype)) {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unknown filtertype");
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unknown filter_type");
         }
 
         BlockFilterIndex* index = GetBlockFilterIndex(filtertype);
         if (!index) {
-            throw JSONRPCError(RPC_MISC_ERROR, "Index is not enabled for filtertype " + filtertype_name);
+            throw JSONRPCError(RPC_MISC_ERROR, "Index is not enabled for filter_type " + filtertype_name);
         }
 
         NodeContext& node = EnsureAnyNodeContext(request.context);

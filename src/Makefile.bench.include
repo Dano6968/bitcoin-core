@@ -44,6 +44,7 @@ bench_bench_bitcoin_SOURCES = \
   bench/prevector.cpp \
   bench/rollingbloom.cpp \
   bench/rpc_blockchain.cpp \
+  bench/rpc_scanblocks.cpp \
   bench/rpc_mempool.cpp \
   bench/strencodings.cpp \
   bench/util_time.cpp \
@@ -60,6 +61,7 @@ bench_bench_bitcoin_LDADD = \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
+  $(LIBBITCOIN_CLI) \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBLEVELDB) \

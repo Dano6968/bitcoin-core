@@ -661,7 +661,7 @@ bool BerkeleyBatch::StartCursor()
     assert(!m_cursor);
     if (!pdb)
         return false;
-    int ret = pdb->cursor(nullptr, &m_cursor, 0);
+    int ret = pdb->cursor(activeTxn, &m_cursor, 0);
     return ret == 0;
 }
 

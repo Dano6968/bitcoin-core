@@ -3776,7 +3776,7 @@ bool CWallet::MigrateToSQLite(bilingual_str& error)
         CDataStream ss_key(SER_DISK, CLIENT_VERSION);
         CDataStream ss_value(SER_DISK, CLIENT_VERSION);
         bool ret = batch->ReadAtCursor(ss_key, ss_value, complete);
-        if (!ret) {
+        if (!ret || complete) {
             break;
         }
         SerializeData key(ss_key.begin(), ss_key.end());

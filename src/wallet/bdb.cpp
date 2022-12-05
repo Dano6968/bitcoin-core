@@ -675,6 +675,7 @@ bool BerkeleyBatch::ReadAtCursor(CDataStream& ssKey, CDataStream& ssValue, bool&
     int ret = m_cursor->get(datKey, datValue, DB_NEXT);
     if (ret == DB_NOTFOUND) {
         complete = true;
+        return true;
     }
     if (ret != 0)
         return false;

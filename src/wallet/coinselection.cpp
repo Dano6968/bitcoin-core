@@ -13,6 +13,7 @@
 
 #include <numeric>
 #include <optional>
+#include <queue>
 
 namespace wallet {
 // Common selection error across the algorithms
@@ -172,9 +173,20 @@ util::Result<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool
     return result;
 }
 
-util::Result<SelectionResult> SelectCoinsSRD(const std::vector<OutputGroup>& utxo_pool, CAmount target_value, FastRandomContext& rng)
+class MinOutputGroupComparator
+{
+public:
+    int operator() (const OutputGroup& group1, const OutputGroup& group2)
+    {
+        return group1.GetSelectionAmount() > group2.GetSelectionAmount();
+    }
+};
+
+util::Result<SelectionResult> SelectCoinsSRD(const std::vector<OutputGroup>& utxo_pool, CAmount target_value, FastRandomContext& rng,
+                                             int max_weight)
 {
     SelectionResult result(target_value, SelectionAlgorithm::SRD);
+    std::priority_queue<OutputGroup, std::vector<OutputGroup>, MinOutputGroupComparator> heap;
 
     // Include change for SRD as we want to avoid making really small change if the selection just
     // barely meets the target. Just use the lower bound change target instead of the randomly
@@ -188,16 +200,51 @@ util::Result<SelectionResult> SelectCoinsSRD(const std::vector<OutputGroup>& utx
     Shuffle(indexes.begin(), indexes.end(), rng);
 
     CAmount selected_eff_value = 0;
+    int weight = 0;
+    bool max_tx_size_exceeded = false;
     for (const size_t i : indexes) {
         const OutputGroup& group = utxo_pool.at(i);
         Assume(group.GetSelectionAmount() > 0);
+
+        // If the selection weight exceeds the maximum allowed size, remove the least valuable inputs until we
+        // can insert the new group (while the sum of them are less than the new group amount).
+        weight += group.m_weight;
+        if (weight > max_weight) {
+            max_tx_size_exceeded = true; // mark it in case we don't find any useful result.
+
+            // if the least valuable input is greater, discard the new group.
+            CAmount new_group_amount = group.GetSelectionAmount();
+            if (new_group_amount <= heap.top().GetSelectionAmount()) {
+                weight -= group.m_weight;
+                continue;
+            }
+
+            // Keep popping up inputs while we exceed the max weight and the
+            // arriving 'group' amount is less than the removed inputs.
+            CAmount least_valuable_amounts = 0;
+            do {
+                const OutputGroup& to_remove_group = heap.top();
+                CAmount min_group_amount = to_remove_group.GetSelectionAmount();
+                least_valuable_amounts += min_group_amount;
+                selected_eff_value -= min_group_amount;
+                weight -= to_remove_group.m_weight;
+                heap.pop();
+            } while (!heap.empty() && least_valuable_amounts < new_group_amount && weight > max_weight);
+        }
+
+        // Add group to selection
         selected_eff_value += group.GetSelectionAmount();
-        result.AddInput(group);
+        heap.push(group);
         if (selected_eff_value >= target_value) {
+            // Result found, add it.
+            while (!heap.empty()) {
+                result.AddInput(heap.top());
+                heap.pop();
+            }
             return result;
         }
     }
-    return util::Error();
+    return max_tx_size_exceeded ? ErrorMaxWeightExceeded() : util::Error();
 }
 
 /** Find a subset of the OutputGroups that is at least as large as, but as close as possible to, the
@@ -402,6 +449,7 @@ CAmount GetSelectionWaste(const std::set<COutput>& inputs, CAmount change_cost, 
     CAmount selected_effective_value = 0;
     for (const COutput& coin : inputs) {
         waste += coin.GetFee() - coin.long_term_fee;
+        std::cout << "long term fee " << coin.long_term_fee << std::endl;
         selected_effective_value += use_effective_value ? coin.GetEffectiveValue() : coin.txout.nValue;
     }
 

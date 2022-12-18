@@ -568,7 +568,7 @@ util::Result<SelectionResult> ChooseSelectionResult(const CWallet& wallet, const
         results.push_back(*knapsack_result);
     } else append_error(knapsack_result);
 
-    if (auto srd_result{SelectCoinsSRD(positive_groups, nTargetValue, coin_selection_params.rng_fast)}) {
+    if (auto srd_result{SelectCoinsSRD(positive_groups, nTargetValue, coin_selection_params.rng_fast, max_weight)}) {
         srd_result->ComputeAndSetWaste(coin_selection_params.min_viable_change, coin_selection_params.m_cost_of_change, coin_selection_params.m_change_fee);
         results.push_back(*srd_result);
     } else append_error(srd_result);

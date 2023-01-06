@@ -583,6 +583,8 @@ static RPCHelpMan getblockheader()
 
 static CBlock GetBlockChecked(BlockManager& blockman, const CBlockIndex* pblockindex)
 {
+    if (pblockindex->nHeight == 0) return Params().GenesisBlock();
+
     CBlock block;
     {
         LOCK(cs_main);

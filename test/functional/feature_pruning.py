@@ -484,8 +484,11 @@ class PruneTest(BitcoinTestFramework):
         assert genesis_blockhash in node.scanblocks(
             "start", [{"desc": f"raw({false_positive_spk.hex()})"}], 0, 0)['relevant_blocks']
 
+        assert_equal(len(node.scanblocks(
+            "start", [{"desc": f"raw({false_positive_spk.hex()})"}], 0, 0, "basic", {"filter_false_positives": True})['relevant_blocks']), 0)
+
         assert_raises_rpc_error(-1, "Block not available (pruned data)", node.scanblocks,
-            "start", [{"desc": f"raw({false_positive_spk.hex()})"}], 0, 0, "basic", {"filter_false_positives": True})
+            "start", [{"desc": f"raw({false_positive_spk.hex()})"}], 0, 2, "basic", {"filter_false_positives": True})
 
 if __name__ == '__main__':
     PruneTest().main()

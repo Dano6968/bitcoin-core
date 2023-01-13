@@ -14,10 +14,10 @@ class ExternalSignerScriptPubKeyMan : public DescriptorScriptPubKeyMan
 {
   public:
   ExternalSignerScriptPubKeyMan(WalletStorage& storage, WalletDescriptor& descriptor)
-      :   DescriptorScriptPubKeyMan(storage, descriptor)
+      :   DescriptorScriptPubKeyMan(storage, descriptor, /*keypool_size=*/0)
       {}
   ExternalSignerScriptPubKeyMan(WalletStorage& storage)
-      :   DescriptorScriptPubKeyMan(storage)
+      :   DescriptorScriptPubKeyMan(storage, /*keypool_size=*/0)
       {}
 
   /** Provide a descriptor at setup time
